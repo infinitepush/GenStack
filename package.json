@@ -1,0 +1,27 @@
+{
+  "name": "genstack",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Config-driven AI app generator runtime.",
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @genstack/web",
+    "dev:web": "npm run dev --workspace @genstack/web",
+    "dev:api": "npm run dev --workspace @genstack/api",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "prisma": "^5.22.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
