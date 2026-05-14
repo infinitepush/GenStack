@@ -1,6 +1,7 @@
 "use client";
 
-import { Github } from "lucide-react";
+import { Github, Layers3 } from "lucide-react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -46,13 +47,35 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
   };
 
   return (
-    <div className="mx-auto flex min-h-[80vh] max-w-md items-center">
-      <div className="w-full rounded-lg border border-line bg-panel/90 p-6 shadow-2xl shadow-black/30">
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-electric">{appConfig.app.name}</p>
-        <h1 className="mt-3 text-2xl font-semibold">Sign in</h1>
-        <p className="mt-2 text-sm text-zinc-500">
-          Use the demo credentials below, or configure GitHub OAuth in `.env`.
+    <div className="relative mx-auto grid min-h-[72vh] max-w-5xl items-center gap-8 overflow-hidden rounded-2xl border border-line bg-panel/60 p-6 shadow-2xl shadow-black/30 lg:grid-cols-[1fr_420px]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(99,102,241,0.24),transparent_24rem),radial-gradient(circle_at_85%_80%,rgba(14,165,233,0.12),transparent_20rem)]" />
+      <div className="relative hidden lg:block">
+        <Link className="inline-flex items-center gap-3" href="/">
+          <div className="grid h-10 w-10 place-items-center rounded-lg bg-indigo-electric text-white shadow-lg shadow-indigo-500/30">
+            <Layers3 className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-semibold">GenStack</p>
+            <p className="text-xs text-zinc-500">AI Runtime Studio</p>
+          </div>
+        </Link>
+        <h1 className="mt-10 max-w-md text-4xl font-semibold leading-tight">Sign in when you are ready to save and ship.</h1>
+        <p className="mt-4 max-w-md text-sm leading-6 text-zinc-400">
+          The demo remains open for fast review. Authentication is available for GitHub OAuth and local credentials.
         </p>
+        <div className="mt-8 grid max-w-sm gap-3">
+          {["Prompt to config", "Runtime-ready dashboards", "CRUD data persistence"].map((item) => (
+            <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-300" key={item}>
+              {item}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative w-full rounded-xl border border-line bg-black/45 p-6 shadow-2xl shadow-black/40 backdrop-blur">
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-electric">GenStack</p>
+        <h2 className="mt-3 text-2xl font-semibold">Sign in</h2>
+        <p className="mt-2 text-sm text-zinc-500">Use demo credentials, or connect GitHub OAuth.</p>
 
         {error ? (
           <div className="mt-4 rounded-md border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-100">

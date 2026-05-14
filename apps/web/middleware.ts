@@ -10,10 +10,14 @@ const intlMiddleware = createMiddleware({
 });
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  if (request.nextUrl.pathname === "/") {
+    return NextResponse.next();
+  }
+
   const segments = request.nextUrl.pathname.split("/").filter(Boolean);
   const locale = segments[0] ?? appConfig.app.locale;
   const section = segments[1];
-  const protectedSection = section === "dashboard" || section === "ai" || section === "import" || section === "export" || section === "config";
+  const protectedSection = section === "import" || section === "export";
 
   if (!appConfig.auth.enabled) {
     return intlMiddleware(request);

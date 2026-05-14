@@ -1,12 +1,60 @@
 import { randomUUID } from "node:crypto";
+import type { AppConfig } from "@genstack/config-types";
 import { parsePossiblyBrokenJson } from "./json-utils.js";
-import { createAiProvider } from "./providers.js";
+import { buildConfigFromPrompt, createAiProvider } from "./providers.js";
 import { evaluateConfig } from "./evaluation-engine.js";
 import { repairAndValidateConfig } from "./repair-engine.js";
 import type { AiProvider, PipelineRunResult, PipelineStage, PipelineStageStatus } from "./types.js";
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function hasWord(value: string, word: string): boolean {
+  return new RegExp(`\\b${word}\\b`, "i").test(value);
+}
+
+function configSearchText(config: AppConfig): string {
+  return JSON.stringify({
+    app: config.app.name,
+    tables: config.database.tables.map((table) => ({
+      name: table.name,
+      fields: table.fields.map((field) => field.name)
+    })),
+    pages: config.ui.pages.map((page) => ({
+      name: page.name,
+      components: page.components
+    }))
+  }).toLowerCase();
+}
+
+function promptDomainMismatch(prompt: string, config: AppConfig): string | undefined {
+  const lowerPrompt = prompt.toLowerCase();
+  const text = configSearchText(config);
+  const looksExpenseLike = text.includes("expense") || text.includes("expenses");
+
+  const expectedDomains = [
+    {
+      name: "pizza delivery",
+      promptMatches:
+        lowerPrompt.includes("pizza") ||
+        lowerPrompt.includes("delivery") ||
+        lowerPrompt.includes("restaurant") ||
+        lowerPrompt.includes("food order"),
+      configTokens: ["pizza", "order", "delivery", "restaurant", "menu"]
+    },
+    {
+      name: "parking",
+      promptMatches: lowerPrompt.includes("parking") || lowerPrompt.includes("vehicle") || hasWord(lowerPrompt, "car"),
+      configTokens: ["parking", "vehicle", "plate", "slot"]
+    }
+  ];
+
+  const expected = expectedDomains.find((domain) => domain.promptMatches);
+  if (!expected) return undefined;
+
+  const hasExpectedRuntime = expected.configTokens.some((token) => text.includes(token));
+  return hasExpectedRuntime && !looksExpenseLike ? undefined : expected.name;
 }
 
 async function timedStage<T>(
@@ -84,13 +132,33 @@ export class PipelineEngine {
       (result) => (result.findings.some((finding) => finding.severity === "error") ? "Config has blocking findings after repair." : undefined)
     );
 
-    const evaluation = await timedStage(
+    let finalRepair = repair;
+    let finalEvaluation = await timedStage(
       stages,
       "evaluate",
       async () => evaluateConfig(repair.config),
       (result) => `Evaluation completed with grade ${result.grade}.`,
       (result) => (result.blockers.length > 0 ? "Evaluation found blockers." : undefined)
     );
+
+    const mismatchedDomain = promptDomainMismatch(prompt, finalRepair.config);
+    if (mismatchedDomain) {
+      finalRepair = await timedStage(
+        stages,
+        "domain fallback",
+        async () => repairAndValidateConfig(buildConfigFromPrompt(prompt)),
+        (result) =>
+          `Replaced mismatched draft with safe ${mismatchedDomain} runtime config (${result.changes.length} repair change(s)).`
+      );
+
+      finalEvaluation = await timedStage(
+        stages,
+        "fallback evaluate",
+        async () => evaluateConfig(finalRepair.config),
+        (result) => `Fallback evaluation completed with grade ${result.grade}.`,
+        (result) => (result.blockers.length > 0 ? "Fallback evaluation found blockers." : undefined)
+      );
+    }
 
     return {
       runId: randomUUID(),
@@ -99,9 +167,9 @@ export class PipelineEngine {
       model: draft.model,
       stages,
       rawDraft: draft.text,
-      config: repair.config,
-      repair,
-      evaluation
+      config: finalRepair.config,
+      repair: finalRepair,
+      evaluation: finalEvaluation
     };
   }
 }

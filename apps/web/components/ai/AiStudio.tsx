@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Hammer, Play, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Dumbbell, Hammer, Hospital, Play, ReceiptText, Sparkles, Target, Warehouse } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { AppConfig } from "@genstack/config-types";
+import { getActiveRuntime, saveRuntimeConfig, type RuntimeHistoryEntry } from "@/lib/runtime-history";
 
 type StageStatus = "success" | "warning" | "error";
 type FindingSeverity = "error" | "warning" | "info";
@@ -75,6 +76,36 @@ const examples = [
   "Generate a task tracker with priority, status, due date, and a project dashboard."
 ];
 
+const templates = [
+  {
+    icon: Target,
+    title: "CRM System",
+    prompt: "Create a CRM for leads with stages, deal value, company name, and lead owner."
+  },
+  {
+    icon: ReceiptText,
+    title: "Expense Tracker",
+    prompt: "Build an expense tracker with dashboard, form, table, and analytics by category."
+  },
+  {
+    icon: Dumbbell,
+    title: "Gym Manager",
+    prompt: "Build a gym manager for members, membership types, payments, classes, and bookings."
+  },
+  {
+    icon: Hospital,
+    title: "Hospital Billing",
+    prompt: "Build a hospital billing app for patients, invoices, payment status, departments, and analytics."
+  },
+  {
+    icon: Warehouse,
+    title: "Inventory Manager",
+    prompt: "Build an inventory manager for products, stock levels, suppliers, reorder status, and warehouse analytics."
+  }
+];
+
+const generationSteps = ["Generating config", "Repairing schema", "Building runtime", "Preparing analytics"];
+
 function statusClass(status: StageStatus): string {
   if (status === "error") return "border-red-500/50 bg-red-500/10 text-red-100";
   if (status === "warning") return "border-yellow-500/50 bg-yellow-500/10 text-yellow-100";
@@ -107,13 +138,15 @@ export function AiStudio(): JSX.Element {
   const router = useRouter();
   const params = useParams<{ locale: string }>();
   const locale = params.locale ?? "en";
-  const [prompt, setPrompt] = useState(examples[0] ?? "");
+  const [prompt, setPrompt] = useState("");
   const [jsonInput, setJsonInput] = useState("");
   const [result, setResult] = useState<PipelineRunResult | null>(null);
   const [repair, setRepair] = useState<RepairResult | null>(null);
+  const [currentRuntime, setCurrentRuntime] = useState<RuntimeHistoryEntry | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [showJson, setShowJson] = useState(false);
 
   const activeConfig = repair?.config ?? result?.config;
   const activeEvaluation = result?.evaluation;
@@ -122,6 +155,17 @@ export function AiStudio(): JSX.Element {
     if (!result) return 0;
     return Math.round((result.evaluation.score / result.evaluation.maxScore) * 100);
   }, [result]);
+
+  useEffect(() => {
+    setCurrentRuntime(getActiveRuntime());
+    const onConfigApplied = (): void => {
+      setCurrentRuntime(getActiveRuntime());
+    };
+    window.addEventListener("genstack:config-applied", onConfigApplied);
+    return () => {
+      window.removeEventListener("genstack:config-applied", onConfigApplied);
+    };
+  }, []);
 
   const runPipeline = async (): Promise<void> => {
     setIsGenerating(true);
@@ -155,9 +199,17 @@ export function AiStudio(): JSX.Element {
 
   const applyConfig = async (): Promise<void> => {
     if (!activeConfig) return;
+    if (currentRuntime && currentRuntime.appName !== activeConfig.app.name) {
+      const shouldReplace = window.confirm(
+        `Replace current runtime "${currentRuntime.appName}" with "${activeConfig.app.name}"? You can restore older generations from the sidebar history.`
+      );
+      if (!shouldReplace) return;
+    }
     setIsApplying(true);
     try {
       await postJson<unknown>("/config", activeConfig);
+      const savedRuntime = saveRuntimeConfig(activeConfig, result?.prompt ?? prompt);
+      setCurrentRuntime(savedRuntime);
       window.dispatchEvent(new CustomEvent("genstack:config-applied"));
       const firstRoute = activeConfig.ui.pages[0]?.route ?? "/dashboard";
       toast.success("Config applied. Opening generated app.");
@@ -172,32 +224,49 @@ export function AiStudio(): JSX.Element {
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_460px]">
       <section className="space-y-6">
-        <div className="rounded-lg border border-line bg-panel/90 p-6">
+        <div className="rounded-lg border border-line bg-panel/90 p-6 shadow-2xl shadow-black/20">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-electric">Phase 2</p>
-              <h1 className="mt-3 text-3xl font-semibold">AI Pipeline Studio</h1>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-electric">AI Runtime Studio</p>
+              <h1 className="mt-3 text-4xl font-semibold">Generate a working internal tool</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                Generate, validate, repair, and evaluate runtime app configs before they reach the renderer.
+                Start with an empty workspace, describe an app, then open a live CRUD dashboard generated from config.
               </p>
             </div>
             <Sparkles className="h-6 w-6 text-indigo-300" />
           </div>
 
+          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {templates.map((template) => (
+              <button
+                className="rounded-lg border border-line bg-black/25 p-4 text-left hover:border-indigo-electric/60 hover:bg-indigo-electric/10"
+                key={template.title}
+                onClick={() => setPrompt(template.prompt)}
+                type="button"
+              >
+                <template.icon className="h-5 w-5 text-indigo-300" />
+                <p className="mt-3 text-sm font-medium text-zinc-100">{template.title}</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{template.prompt.split(" ").slice(0, 9).join(" ")}...</p>
+              </button>
+            ))}
+          </div>
+
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
+            placeholder="Example: Build a parking manager for vehicles, slots, payments, and analytics."
             className="mt-6 min-h-36 w-full resize-y rounded-lg border border-line bg-black/40 p-4 text-sm text-zinc-100 outline-none focus:border-indigo-electric"
           />
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {examples.map((example) => (
               <button
+                className="rounded-full border border-line bg-black/25 px-3 py-1.5 text-xs text-zinc-400 hover:border-indigo-electric/50 hover:text-zinc-100"
                 key={example}
                 onClick={() => setPrompt(example)}
-                className="rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-300 hover:bg-white/5"
+                type="button"
               >
-                {example.split(" ").slice(0, 5).join(" ")}
+                {example.split(" ").slice(1, 4).join(" ")}
               </button>
             ))}
           </div>
@@ -210,6 +279,17 @@ export function AiStudio(): JSX.Element {
             <Play className="h-4 w-4" />
             {isGenerating ? "Running pipeline..." : "Run pipeline"}
           </button>
+
+          {isGenerating ? (
+            <div className="mt-5 grid gap-2 md:grid-cols-4">
+              {generationSteps.map((step, index) => (
+                <div className="rounded-md border border-indigo-400/30 bg-indigo-400/10 px-3 py-2 text-xs text-indigo-100" key={step}>
+                  <span className="mr-2 font-mono text-indigo-300">0{index + 1}</span>
+                  {step}...
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {result ? (
@@ -277,36 +357,42 @@ export function AiStudio(): JSX.Element {
       </section>
 
       <aside className="space-y-6">
-        <div className="rounded-lg border border-line bg-panel p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-zinc-200">Config JSON</h2>
-            <button
-              onClick={() => void repairJson()}
-              disabled={isRepairing || jsonInput.trim().length === 0}
-              className="inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200 disabled:opacity-60"
-            >
-              <Hammer className="h-3.5 w-3.5" />
-              {isRepairing ? "Repairing..." : "Repair"}
-            </button>
+        {!activeConfig ? (
+          <div className="rounded-lg border border-indigo-400/20 bg-indigo-400/10 p-5">
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-indigo-300">Empty workspace</p>
+            <h2 className="mt-3 text-xl font-semibold text-white">Ready to generate your first app</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              GenStack will create a schema, CRUD APIs, dashboard pages, forms, tables, and analytics from your prompt.
+            </p>
+            <div className="mt-5 space-y-2 text-sm text-zinc-300">
+              {["Generate schema", "Build runtime pages", "Wire CRUD endpoints", "Open generated dashboard"].map((item, index) => (
+                <div className="flex items-center gap-3 rounded-md border border-line bg-black/20 px-3 py-2" key={item}>
+                  <span className="font-mono text-xs text-indigo-300">0{index + 1}</span>
+                  {item}
+                </div>
+              ))}
+            </div>
+            {currentRuntime ? (
+              <p className="mt-4 text-xs text-zinc-500">
+                Current runtime: <span className="text-zinc-300">{currentRuntime.appName}</span>. New configs will ask before replacing it.
+              </p>
+            ) : null}
           </div>
-          <textarea
-            value={jsonInput}
-            onChange={(event) => setJsonInput(event.target.value)}
-            placeholder="Generated config appears here. Paste config JSON to repair it."
-            className="mt-4 min-h-[520px] w-full resize-y rounded-md border border-line bg-black/60 p-4 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-indigo-electric"
-          />
-        </div>
+        ) : null}
 
         {activeConfig ? (
           <div className="rounded-lg border border-line bg-panel p-4">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-medium text-zinc-200">Runtime summary</h2>
+              <div>
+                <h2 className="text-sm font-medium text-zinc-200">Generated runtime</h2>
+                <p className="mt-1 text-xs text-zinc-500">{activeConfig.app.name}</p>
+              </div>
               <button
                 className="rounded-md bg-indigo-electric px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
                 disabled={isApplying}
                 onClick={() => void applyConfig()}
               >
-                {isApplying ? "Applying..." : "Apply & Open App"}
+                {isApplying ? "Applying..." : currentRuntime ? "Replace & Open App" : "Apply & Open App"}
               </button>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-3 text-center">
@@ -325,6 +411,47 @@ export function AiStudio(): JSX.Element {
             </div>
           </div>
         ) : null}
+
+        <div className="rounded-lg border border-line bg-panel p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium text-zinc-200">Config JSON</h2>
+              <p className="mt-1 text-xs text-zinc-500">Developer details, hidden by default for demos.</p>
+            </div>
+            <button
+              className="rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200"
+              onClick={() => setShowJson((previous) => !previous)}
+              type="button"
+            >
+              {showJson ? "Hide JSON" : "Show JSON"}
+            </button>
+          </div>
+
+          {showJson ? (
+            <>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => void repairJson()}
+                  disabled={isRepairing || jsonInput.trim().length === 0}
+                  className="inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200 disabled:opacity-60"
+                >
+                  <Hammer className="h-3.5 w-3.5" />
+                  {isRepairing ? "Repairing..." : "Repair"}
+                </button>
+              </div>
+              <textarea
+                value={jsonInput}
+                onChange={(event) => setJsonInput(event.target.value)}
+                placeholder="Generated config appears here. Paste config JSON to repair it."
+                className="mt-3 min-h-[360px] w-full resize-y rounded-md border border-line bg-black/60 p-4 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-indigo-electric"
+              />
+            </>
+          ) : (
+            <div className="mt-4 rounded-md border border-line bg-black/25 p-4 text-sm text-zinc-500">
+              JSON is available for inspection and repair, but the primary flow is generation, runtime readiness, and opening the app.
+            </div>
+          )}
+        </div>
 
         {(repair?.findings ?? result?.repair.findings ?? []).length > 0 ? (
           <div className="rounded-lg border border-line bg-panel p-4">

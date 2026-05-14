@@ -28,6 +28,10 @@ function titleCase(value: string): string {
     .join(" ");
 }
 
+function hasWord(value: string, word: string): boolean {
+  return new RegExp(`\\b${word}\\b`, "i").test(value);
+}
+
 function inferDomain(prompt: string): {
   appName: string;
   tableName: string;
@@ -61,21 +65,66 @@ function inferDomain(prompt: string): {
     };
   }
 
+  if (lower.includes("pizza") || lower.includes("delivery") || lower.includes("restaurant") || lower.includes("food order")) {
+    return {
+      appName: "Pizza Delivery Manager",
+      tableName: "pizza_orders",
+      fields: [
+        { name: "customer_name", type: "string", required: true },
+        { name: "pizza_type", type: "enum", options: ["margherita", "pepperoni", "veggie", "paneer"], required: true },
+        { name: "delivery_address", type: "string", required: true },
+        { name: "total_amount", type: "number" },
+        { name: "order_status", type: "enum", options: ["pending", "preparing", "out_for_delivery", "delivered"] },
+        { name: "order_date", type: "date" }
+      ]
+    };
+  }
+
+  if (lower.includes("parking") || lower.includes("vehicle") || hasWord(lower, "car")) {
+    return {
+      appName: "Parking Manager",
+      tableName: "parking_sessions",
+      fields: [
+        { name: "plate_number", type: "string", required: true },
+        { name: "vehicle_type", type: "enum", options: ["car", "bike", "truck", "van"], required: true },
+        { name: "slot_number", type: "string", required: true },
+        { name: "fee_amount", type: "number" },
+        { name: "status", type: "enum", options: ["parked", "paid", "exited"] },
+        { name: "entry_date", type: "date" }
+      ]
+    };
+  }
+
+  if (lower.includes("expense") || lower.includes("spending") || lower.includes("budget")) {
+    return {
+      appName: "Expense Tracker",
+      tableName: "expenses",
+      fields: [
+        { name: "title", type: "string", required: true },
+        { name: "amount", type: "number", required: true },
+        { name: "category", type: "enum", options: ["food", "travel", "software", "other"] },
+        { name: "date", type: "date" }
+      ]
+    };
+  }
+
   return {
-    appName: lower.includes("expense") ? "Expense Tracker" : `${titleCase(prompt) || "Generated"} App`,
-    tableName: "expenses",
+    appName: `${titleCase(prompt) || "Generated"} App`,
+    tableName: "records",
     fields: [
       { name: "title", type: "string", required: true },
-      { name: "amount", type: "number", required: true },
-      { name: "category", type: "enum", options: ["food", "travel", "software", "other"] },
-      { name: "date", type: "date" }
+      { name: "status", type: "enum", options: ["new", "active", "done"] },
+      { name: "value", type: "number" },
+      { name: "created_date", type: "date" }
     ]
   };
 }
 
-function buildConfigFromPrompt(prompt: string): AppConfig {
+export function buildConfigFromPrompt(prompt: string): AppConfig {
   const domain = inferDomain(prompt);
   const basePath = `/${domain.tableName}`;
+  const numericField = domain.fields.find((field) => field.type === "number")?.name;
+  const groupField = domain.fields.find((field) => field.type === "enum")?.name ?? domain.fields[0]?.name ?? "title";
 
   return {
     app: {
@@ -116,7 +165,14 @@ function buildConfigFromPrompt(prompt: string): AppConfig {
           name: "Analytics",
           route: "/analytics",
           components: [
-            { type: "chart", chartType: "bar", source: domain.tableName, groupBy: domain.fields[2]?.name ?? domain.fields[0]?.name, field: domain.fields[1]?.name ?? domain.fields[0]?.name, aggregation: "sum" }
+            {
+              type: "chart",
+              chartType: "bar",
+              source: domain.tableName,
+              groupBy: groupField,
+              field: numericField ?? groupField,
+              aggregation: numericField ? "sum" : "count"
+            }
           ]
         }
       ]
@@ -146,7 +202,8 @@ function runtimeContractPrompt(): string {
     "Every database table must have these API endpoints: GET /table, POST /table, PUT /table/:id, DELETE /table/:id.",
     "Always include one Dashboard page at route /dashboard with stat_card, table, and form components.",
     "For charts, use source, groupBy, field, chartType, and aggregation. The chart field should be numeric when possible.",
-    "Use short lowercase plural table names like expenses, leads, tasks, products.",
+    "Use short lowercase plural table names that match the user's domain, like parking_sessions, invoices, members, bookings, leads, tasks, or products.",
+    "Do not reuse example tables or fields unless they match the user's requested app domain.",
     "Example shape:",
     JSON.stringify(buildConfigFromPrompt("Build a CRM dashboard for leads"), null, 2)
   ].join("\n");

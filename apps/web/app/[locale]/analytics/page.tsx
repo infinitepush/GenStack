@@ -1,5 +1,11 @@
 import { DynamicPage } from "@/components/DynamicPage";
 
-export default function AnalyticsPage(): JSX.Element {
-  return <DynamicPage route="/analytics" />;
+interface AnalyticsPageProps {
+  params: {
+    locale: string;
+  };
+}
+
+export default function AnalyticsPage({ params }: AnalyticsPageProps): JSX.Element {
+  return <DynamicPage locale={params.locale} route="/analytics" />;
 }

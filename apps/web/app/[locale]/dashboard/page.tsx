@@ -1,5 +1,11 @@
 import { DynamicPage } from "@/components/DynamicPage";
 
-export default function DashboardPage(): JSX.Element {
-  return <DynamicPage route="/dashboard" />;
+interface DashboardPageProps {
+  params: {
+    locale: string;
+  };
+}
+
+export default function DashboardPage({ params }: DashboardPageProps): JSX.Element {
+  return <DynamicPage locale={params.locale} route="/dashboard" />;
 }

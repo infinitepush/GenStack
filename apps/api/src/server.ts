@@ -18,7 +18,7 @@ interface ApiResponse<T> {
 }
 
 const app = express();
-const port = Number.parseInt(process.env.API_PORT ?? "4000", 10);
+const port = Number.parseInt(process.env.PORT ?? process.env.API_PORT ?? "4000", 10);
 
 const configuredOrigins = (process.env.WEB_ORIGINS ?? process.env.WEB_ORIGIN ?? "http://localhost:3000")
   .split(",")

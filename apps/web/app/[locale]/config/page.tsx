@@ -9,6 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { AppConfig, ConfigIssue } from "@genstack/config-types";
 import { appConfig } from "@/lib/app-config";
+import { getActiveRuntime, saveRuntimeConfig } from "@/lib/runtime-history";
 
 interface ConfigEngineResult {
   config: AppConfig;
@@ -50,6 +51,23 @@ export default function ConfigPage(): JSX.Element {
     setIsSaving(true);
     try {
       const parsed = JSON.parse(json) as unknown;
+      const currentRuntime = getActiveRuntime();
+      const parsedAppName =
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "app" in parsed &&
+        typeof parsed.app === "object" &&
+        parsed.app !== null &&
+        "name" in parsed.app &&
+        typeof parsed.app.name === "string"
+          ? parsed.app.name
+          : "this config";
+      if (currentRuntime && currentRuntime.appName !== parsedAppName) {
+        const shouldReplace = window.confirm(
+          `Replace current runtime "${currentRuntime.appName}" with "${parsedAppName}"? You can restore older generations from the sidebar history.`
+        );
+        if (!shouldReplace) return;
+      }
       const next = await readApi<ConfigEngineResult>(
         await fetch(`${apiBase()}/config`, {
           method: "POST",
@@ -59,6 +77,7 @@ export default function ConfigPage(): JSX.Element {
       );
       setResult(next);
       setJson(JSON.stringify(next.config, null, 2));
+      saveRuntimeConfig(next.config, "Applied from Config Editor");
       window.dispatchEvent(new CustomEvent("genstack:config-applied"));
       const firstRoute = next.config.ui.pages[0]?.route ?? "/dashboard";
       toast.success("Config applied. Opening generated app.");
@@ -96,6 +115,8 @@ export default function ConfigPage(): JSX.Element {
       const next = await readApi<ConfigEngineResult>(await fetch(`${apiBase()}/config/reset`, { method: "POST" }));
       setResult(next);
       setJson(JSON.stringify(next.config, null, 2));
+      saveRuntimeConfig(next.config, "Reset to demo config");
+      window.dispatchEvent(new CustomEvent("genstack:config-applied"));
       toast.success("Demo config restored");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Unable to reset config");

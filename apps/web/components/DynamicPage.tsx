@@ -1,10 +1,12 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AppConfig, ComponentConfig, ConfigEngineResult, DatabaseTableConfig, PageConfig } from "@genstack/config-types";
 import { getComponentRenderer, type DataRecord } from "@/components/registry";
+import { getActiveRuntime } from "@/lib/runtime-history";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -14,6 +16,7 @@ interface ApiResponse<T> {
 
 interface DynamicPageProps {
   route: string;
+  locale: string;
 }
 
 function apiBase(): string {
@@ -48,11 +51,12 @@ async function parseApiResponse<T>(response: Response): Promise<ApiResponse<T>> 
   return body;
 }
 
-export function DynamicPage({ route }: DynamicPageProps): JSX.Element {
+export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
   const t = useTranslations();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [dataByTable, setDataByTable] = useState<Record<string, DataRecord[]>>({});
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [hasActiveRuntime, setHasActiveRuntime] = useState(true);
   const [loadingTables, setLoadingTables] = useState<Record<string, boolean>>({});
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
@@ -60,6 +64,18 @@ export function DynamicPage({ route }: DynamicPageProps): JSX.Element {
     let isMounted = true;
     async function loadConfig(): Promise<void> {
       try {
+        const activeRuntime = getActiveRuntime();
+        if (!activeRuntime) {
+          if (isMounted) {
+            setHasActiveRuntime(false);
+            setConfig(null);
+            setDataByTable({});
+          }
+          return;
+        }
+        if (isMounted) {
+          setHasActiveRuntime(true);
+        }
         const response = await fetch(`${apiBase()}/config`, { cache: "no-store" });
         const body = await parseApiResponse<ConfigEngineResult>(response);
         if (!body.success || !body.data) {
@@ -171,6 +187,21 @@ export function DynamicPage({ route }: DynamicPageProps): JSX.Element {
           <div className="h-48 animate-pulse rounded-lg border border-line bg-panel" />
         </div>
       </div>
+    );
+  }
+
+  if (!config && !hasActiveRuntime) {
+    return (
+      <section className="rounded-lg border border-indigo-400/30 bg-indigo-400/10 p-8 text-center">
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-300">No Active Runtime</p>
+        <h1 className="mt-3 text-2xl font-semibold text-white">Generate your first app</h1>
+        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-400">
+          This workspace starts empty so GenStack feels like an AI platform, not a preloaded demo app. Create a runtime in AI Studio, then its pages will appear here.
+        </p>
+        <Link className="mt-5 inline-flex rounded-md bg-indigo-electric px-4 py-2 text-sm font-medium text-white" href={`/${locale}/ai`}>
+          Open AI Studio
+        </Link>
+      </section>
     );
   }
 
