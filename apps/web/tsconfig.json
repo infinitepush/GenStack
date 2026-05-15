@@ -6,6 +6,7 @@
     "jsx": "preserve",
     "incremental": true,
     "isolatedModules": true,
+    "baseUrl": ".",
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./*"]
