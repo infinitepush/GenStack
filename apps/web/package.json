@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "npm run build --workspace @genstack/config-types && next build",
+    "build": "npm run build --workspace @genstack/config-types && prisma generate --schema ../../prisma/schema.prisma && next build",
     "start": "next start",
     "typecheck": "npm run build --workspace @genstack/config-types && tsc -p tsconfig.json --noEmit"
   },
