@@ -1,7 +1,7 @@
 "use client";
 
 import Editor from "@monaco-editor/react";
-import { ExternalLink, RotateCcw, Save } from "lucide-react";
+import { Download, ExternalLink, RotateCcw, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -9,6 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { AppConfig, ConfigIssue } from "@genstack/config-types";
 import { appConfig } from "@/lib/app-config";
+import { buildConfigDownloadName, downloadJson } from "@/lib/download-json";
 import { getActiveRuntime, saveRuntimeConfig } from "@/lib/runtime-history";
 
 interface ConfigEngineResult {
@@ -137,6 +138,14 @@ export default function ConfigPage(): JSX.Element {
             <button onClick={() => void reset()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-sm">
               <RotateCcw className="h-4 w-4" />
               {t("btn_reset_demo")}
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-sm"
+              onClick={() => downloadJson(buildConfigDownloadName(activeConfig), activeConfig)}
+              type="button"
+            >
+              <Download className="h-4 w-4" />
+              Download JSON
             </button>
             <button onClick={() => void apply()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-md bg-indigo-electric px-3 py-2 text-sm font-medium text-white">
               <Save className="h-4 w-4" />

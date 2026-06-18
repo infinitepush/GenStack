@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ComponentRendererProps } from "./index";
+import { applyComponentFilter } from "./filters";
 import { humanizeIdentifier, humanizeTableName } from "@/lib/labels";
 
 function getStringArray(value: unknown): string[] {
@@ -25,6 +26,7 @@ const TableRenderer = ({ config, data = [], onDeleteRecord, onUpdateRecord, sour
   const [sort, setSort] = useState<{ column: string; direction: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(1);
   const columns = getStringArray(config.columns);
+  const baseData = useMemo(() => applyComponentFilter(data, config), [config, data]);
   const hasActions = Boolean(onDeleteRecord || onUpdateRecord);
   const itemLabel = sourceName ? humanizeTableName(sourceName) : "Record";
   const pageSize = 8;
@@ -32,8 +34,8 @@ const TableRenderer = ({ config, data = [], onDeleteRecord, onUpdateRecord, sour
   const filteredData = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const rows = needle
-      ? data.filter((row) => columns.some((column) => String(row[column] ?? "").toLowerCase().includes(needle)))
-      : data;
+      ? baseData.filter((row) => columns.some((column) => String(row[column] ?? "").toLowerCase().includes(needle)))
+      : baseData;
 
     if (!sort) {
       return rows;
@@ -49,7 +51,7 @@ const TableRenderer = ({ config, data = [], onDeleteRecord, onUpdateRecord, sour
         : String(left ?? "").localeCompare(String(right ?? ""));
       return sort.direction === "asc" ? compared : -compared;
     });
-  }, [columns, data, search, sort]);
+  }, [baseData, columns, search, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filteredData.length / pageSize));
   const visibleData = filteredData.slice((Math.min(page, pageCount) - 1) * pageSize, Math.min(page, pageCount) * pageSize);
@@ -62,7 +64,7 @@ const TableRenderer = ({ config, data = [], onDeleteRecord, onUpdateRecord, sour
     });
   };
 
-  if (data.length === 0) {
+  if (baseData.length === 0) {
     return (
       <div className="rounded-lg border border-line bg-panel p-8 text-center">
         <p className="text-lg font-medium text-zinc-200">No {sourceName ? humanizeIdentifier(sourceName).toLowerCase() : "records"} yet</p>
@@ -118,7 +120,7 @@ const TableRenderer = ({ config, data = [], onDeleteRecord, onUpdateRecord, sour
           value={search}
         />
         <p className="text-xs text-zinc-500">
-          {filteredData.length} of {data.length} record(s)
+          {filteredData.length} of {baseData.length} record(s)
         </p>
       </div>
       <table className="w-full table-fixed">

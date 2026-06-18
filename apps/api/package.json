@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build && node dist/server.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run build --workspace @genstack/config-types && tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "npm run typecheck --workspace @genstack/config-types && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@genstack/config-types": "0.1.0",

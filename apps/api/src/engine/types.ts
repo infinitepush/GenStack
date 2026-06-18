@@ -1,7 +1,15 @@
 import type { AppConfig, ConfigIssue } from "@genstack/config-types";
 
+export type GenerationMode = "structured" | "fallback";
 export type PipelineStageStatus = "success" | "warning" | "error";
 export type FindingSeverity = "error" | "warning" | "info";
+
+export interface PromptIntentSnapshot {
+  domain: string;
+  analytics: string[];
+  expectedFields: string[];
+  expectedTokens: string[];
+}
 
 export interface PipelineStage {
   name: string;
@@ -53,6 +61,7 @@ export interface AiDraft {
   text: string;
   provider: string;
   model: string;
+  structured?: unknown;
 }
 
 export interface PipelineRunResult {
@@ -60,6 +69,9 @@ export interface PipelineRunResult {
   prompt: string;
   provider: string;
   model: string;
+  generationMode: GenerationMode;
+  repairActions: number;
+  intent: PromptIntentSnapshot;
   stages: PipelineStage[];
   rawDraft: string;
   config: AppConfig;

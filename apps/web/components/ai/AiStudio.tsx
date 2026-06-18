@@ -1,11 +1,20 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Dumbbell, Hammer, Hospital, Play, ReceiptText, Sparkles, Target, Warehouse } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Columns2, Download, Dumbbell, Gauge, Hammer, History, Hospital, Play, Sparkles, Target, Wand2, Warehouse } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { AppConfig } from "@genstack/config-types";
+import { buildConfigDownloadName, downloadJson } from "@/lib/download-json";
+import { loadReviewerDemoData } from "@/lib/demo-data";
 import { getActiveRuntime, saveRuntimeConfig, type RuntimeHistoryEntry } from "@/lib/runtime-history";
+import {
+  readGenerationHistory,
+  saveGenerationHistory,
+  type GenerationHistoryEntry,
+  type PromptIntentSnapshot
+} from "@/lib/generation-history";
+import { buildConfigDiffLines, calculateAiConfidenceScore, summarizeReliability } from "@/lib/reviewer-metrics";
 
 type StageStatus = "success" | "warning" | "error";
 type FindingSeverity = "error" | "warning" | "info";
@@ -57,6 +66,9 @@ interface PipelineRunResult {
   prompt: string;
   provider: string;
   model: string;
+  generationMode: "structured" | "fallback";
+  repairActions: number;
+  intent: PromptIntentSnapshot;
   stages: PipelineStage[];
   rawDraft: string;
   config: AppConfig;
@@ -70,37 +82,36 @@ interface ApiResponse<T> {
   error: { code: string; message: string } | null;
 }
 
-const examples = [
-  "Build an expense tracker with dashboard, form, table, and analytics by category.",
-  "Create a CRM for leads with stages, deal value, company name, and lead owner.",
-  "Generate a task tracker with priority, status, due date, and a project dashboard."
-];
-
-const templates = [
+const benchmarkPrompts = [
+  {
+    icon: Warehouse,
+    title: "Inventory Tracker",
+    prompt: "Build an inventory tracker with reorder alerts, low stock thresholds, restocked today analytics, and a clean dashboard.",
+    detail: "Stress tests stock, reorder, and date-based analytics."
+  },
   {
     icon: Target,
-    title: "CRM System",
-    prompt: "Create a CRM for leads with stages, deal value, company name, and lead owner."
-  },
-  {
-    icon: ReceiptText,
-    title: "Expense Tracker",
-    prompt: "Build an expense tracker with dashboard, form, table, and analytics by category."
-  },
-  {
-    icon: Dumbbell,
-    title: "Gym Manager",
-    prompt: "Build a gym manager for members, membership types, payments, classes, and bookings."
+    title: "Sales CRM",
+    prompt: "Create a sales CRM with leads, stages, company names, deal value, and pipeline analytics.",
+    detail: "Tests relational thinking and funnel metrics."
   },
   {
     icon: Hospital,
     title: "Hospital Billing",
-    prompt: "Build a hospital billing app for patients, invoices, payment status, departments, and analytics."
+    prompt: "Build a hospital billing app for patients, invoices, payment status, departments, and analytics.",
+    detail: "Checks multi-table generation and finance-like fields."
   },
   {
-    icon: Warehouse,
-    title: "Inventory Manager",
-    prompt: "Build an inventory manager for products, stock levels, suppliers, reorder status, and warehouse analytics."
+    icon: Gauge,
+    title: "Car Parking Manager",
+    prompt: "Build a car parking manager with slots, vehicle types, payment status, entry dates, and occupancy analytics.",
+    detail: "Useful for CRUD plus slot/availability logic."
+  },
+  {
+    icon: Dumbbell,
+    title: "Task Tracker",
+    prompt: "Generate a task tracker with priority, status, due date, assignee, and a project dashboard.",
+    detail: "Covers everyday internal-tool generation."
   }
 ];
 
@@ -116,6 +127,50 @@ function severityClass(severity: FindingSeverity): string {
   if (severity === "error") return "border-red-500/50 bg-red-500/10 text-red-100";
   if (severity === "warning") return "border-yellow-500/50 bg-yellow-500/10 text-yellow-100";
   return "border-zinc-700 bg-zinc-900/60 text-zinc-300";
+}
+
+function formatReadableLabel(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function getMetric(result: PipelineRunResult | null, key: string): EvaluationMetric | undefined {
+  return result?.evaluation.metrics.find((metric) => metric.key === key);
+}
+
+function getPromptCoveragePercent(result: PipelineRunResult | null): number {
+  const metric = getMetric(result, "prompt_coverage");
+  if (!metric || metric.maxScore <= 0) return 0;
+  return Math.round((metric.score / metric.maxScore) * 100);
+}
+
+function getValidationPercent(result: PipelineRunResult | null): number {
+  if (!result || result.evaluation.maxScore <= 0) return 0;
+  return Math.round((result.evaluation.score / result.evaluation.maxScore) * 100);
+}
+
+function generationModeLabel(mode: "structured" | "fallback"): string {
+  return mode === "structured" ? "Structured Gemini Output" : "Legacy Fallback";
+}
+
+function generationModeTone(mode: "structured" | "fallback"): string {
+  return mode === "structured"
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
+    : "border-yellow-500/30 bg-yellow-500/10 text-yellow-100";
+}
+
+function promptCoverageTone(percent: number): string {
+  if (percent >= 90) return "text-emerald-300";
+  if (percent >= 70) return "text-yellow-200";
+  return "text-red-200";
+}
+
+function stringifyIntentSignals(intent: PromptIntentSnapshot): string[] {
+  const analytics = intent.analytics.map((item) => formatReadableLabel(item));
+  const fields = intent.expectedFields.slice(0, 4).map((field) => formatReadableLabel(field));
+  return [formatReadableLabel(intent.domain), ...analytics, ...fields];
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
@@ -143,21 +198,41 @@ export function AiStudio(): JSX.Element {
   const [result, setResult] = useState<PipelineRunResult | null>(null);
   const [repair, setRepair] = useState<RepairResult | null>(null);
   const [currentRuntime, setCurrentRuntime] = useState<RuntimeHistoryEntry | null>(null);
+  const [generationHistory, setGenerationHistory] = useState<GenerationHistoryEntry[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [showJson, setShowJson] = useState(false);
+  const [showDiff, setShowDiff] = useState(true);
+  const [showReviewerInsights, setShowReviewerInsights] = useState(true);
 
-  const activeConfig = repair?.config ?? result?.config;
+  const activeConfig = repair?.config ?? result?.config ?? currentRuntime?.config;
   const activeEvaluation = result?.evaluation;
   const runtimeReady = Boolean(activeEvaluation && activeEvaluation.blockers.length === 0);
-  const scorePercent = useMemo(() => {
-    if (!result) return 0;
-    return Math.round((result.evaluation.score / result.evaluation.maxScore) * 100);
-  }, [result]);
+  const scorePercent = useMemo(() => getValidationPercent(result), [result]);
+  const promptCoveragePercent = useMemo(() => getPromptCoveragePercent(result), [result]);
+  const confidenceScore = useMemo(
+    () =>
+      result
+        ? calculateAiConfidenceScore({
+            generationMode: result.generationMode,
+            validationPercent: scorePercent,
+            promptCoveragePercent,
+            repairActions: result.repairActions
+          })
+        : 0,
+    [promptCoveragePercent, result, scorePercent]
+  );
+  const reliability = useMemo(() => summarizeReliability(generationHistory), [generationHistory]);
+  const validationMetric = useMemo(() => getMetric(result, "prompt_coverage"), [result]);
+  const diffLines = useMemo(() => (result && activeConfig ? buildConfigDiffLines(result.rawDraft, activeConfig) : []), [activeConfig, result]);
+  const changedDiffLines = useMemo(() => diffLines.filter((line) => line.changed).length, [diffLines]);
+  const intentSignals = useMemo(() => (result ? stringifyIntentSignals(result.intent) : []), [result]);
+  const validationScoreText = result ? `${result.evaluation.score}/${result.evaluation.maxScore}` : "0/0";
 
   useEffect(() => {
     setCurrentRuntime(getActiveRuntime());
+    setGenerationHistory(readGenerationHistory());
     const onConfigApplied = (): void => {
       setCurrentRuntime(getActiveRuntime());
     };
@@ -174,6 +249,20 @@ export function AiStudio(): JSX.Element {
       const next = await postJson<PipelineRunResult>("/ai/generate", { prompt });
       setResult(next);
       setJsonInput(JSON.stringify(next.config, null, 2));
+      const promptCoverage = getPromptCoveragePercent(next);
+      const nextHistory = saveGenerationHistory({
+        appName: next.config.app.name,
+        prompt: next.prompt,
+        generationMode: next.generationMode,
+        repairActions: next.repairActions,
+        validationScore: next.evaluation.score,
+        validationMaxScore: next.evaluation.maxScore,
+        promptCoverage,
+        grade: next.evaluation.grade,
+        intent: next.intent,
+        config: next.config
+      });
+      setGenerationHistory(nextHistory);
       toast.success("Pipeline run completed");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Pipeline failed");
@@ -221,6 +310,20 @@ export function AiStudio(): JSX.Element {
     }
   };
 
+  const downloadActiveConfig = (): void => {
+    if (!activeConfig) return;
+    downloadJson(buildConfigDownloadName(activeConfig), activeConfig);
+    toast.success("Config downloaded");
+  };
+
+  const loadDemoData = (): void => {
+    const nextHistory = loadReviewerDemoData();
+    setGenerationHistory(nextHistory);
+    setCurrentRuntime(getActiveRuntime());
+    window.dispatchEvent(new CustomEvent("genstack:config-applied"));
+    toast.success("Reviewer demo data loaded");
+  };
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_460px]">
       <section className="space-y-6">
@@ -233,22 +336,41 @@ export function AiStudio(): JSX.Element {
                 Start with an empty workspace, describe an app, then open a live CRUD dashboard generated from config.
               </p>
             </div>
-            <Sparkles className="h-6 w-6 text-indigo-300" />
-          </div>
-
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {templates.map((template) => (
+            <div className="flex items-center gap-2">
               <button
-                className="rounded-lg border border-line bg-black/25 p-4 text-left hover:border-indigo-electric/60 hover:bg-indigo-electric/10"
-                key={template.title}
-                onClick={() => setPrompt(template.prompt)}
+                className="inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5"
+                onClick={loadDemoData}
                 type="button"
               >
-                <template.icon className="h-5 w-5 text-indigo-300" />
-                <p className="mt-3 text-sm font-medium text-zinc-100">{template.title}</p>
-                <p className="mt-1 text-xs leading-5 text-zinc-500">{template.prompt.split(" ").slice(0, 9).join(" ")}...</p>
+                <Wand2 className="h-3.5 w-3.5" />
+                Load Demo Data
               </button>
-            ))}
+              <Sparkles className="h-6 w-6 text-indigo-300" />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.18em] text-zinc-500">Benchmark Prompts</p>
+                <p className="mt-2 text-sm text-zinc-500">Click any card to auto-fill a known reviewer prompt.</p>
+              </div>
+              <span className="rounded-full border border-line bg-black/30 px-3 py-1 text-xs text-zinc-400">Fast test suite</span>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {benchmarkPrompts.map((template) => (
+                <button
+                  className="group rounded-xl border border-line bg-black/25 p-4 text-left transition hover:-translate-y-0.5 hover:border-indigo-electric/60 hover:bg-indigo-electric/10"
+                  key={template.title}
+                  onClick={() => setPrompt(template.prompt)}
+                  type="button"
+                >
+                  <template.icon className="h-5 w-5 text-indigo-300 transition group-hover:text-indigo-200" />
+                  <p className="mt-3 text-sm font-medium text-zinc-100">{template.title}</p>
+                  <p className="mt-1 min-h-10 text-xs leading-5 text-zinc-500">{template.detail}</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           <textarea
@@ -257,19 +379,6 @@ export function AiStudio(): JSX.Element {
             placeholder="Example: Build a parking manager for vehicles, slots, payments, and analytics."
             className="mt-6 min-h-36 w-full resize-y rounded-lg border border-line bg-black/40 p-4 text-sm text-zinc-100 outline-none focus:border-indigo-electric"
           />
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {examples.map((example) => (
-              <button
-                className="rounded-full border border-line bg-black/25 px-3 py-1.5 text-xs text-zinc-400 hover:border-indigo-electric/50 hover:text-zinc-100"
-                key={example}
-                onClick={() => setPrompt(example)}
-                type="button"
-              >
-                {example.split(" ").slice(1, 4).join(" ")}
-              </button>
-            ))}
-          </div>
 
           <button
             onClick={() => void runPipeline()}
@@ -301,6 +410,17 @@ export function AiStudio(): JSX.Element {
                   {runtimeReady ? "Runtime Ready" : "Needs Review"}
                 </span>
               </div>
+              <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
+                <span className={`rounded-full border px-2.5 py-1 ${generationModeTone(result.generationMode)}`}>
+                  Generation: {generationModeLabel(result.generationMode)}
+                </span>
+                <span className="rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-indigo-100">
+                  Coverage: {promptCoveragePercent}%
+                </span>
+                <span className="rounded-full border border-line bg-black/30 px-2.5 py-1 text-zinc-300">
+                  Repair: {result.repairActions}
+                </span>
+              </div>
               <div className="mt-4 space-y-1 text-xs text-zinc-500">
                 <p>{result.config.database.tables.length} table(s) configured</p>
                 <p>{result.config.api.endpoints.length} CRUD API route(s) generated</p>
@@ -319,7 +439,22 @@ export function AiStudio(): JSX.Element {
                 {result.stages.map((stage) => (
                   <div key={stage.name} className={`rounded-lg border p-3 ${statusClass(stage.status)}`}>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium capitalize">{stage.name}</span>
+                      <div className="min-w-0">
+                        <span className="block text-sm font-medium capitalize">{stage.name}</span>
+                        <span className="mt-1 block text-[11px] uppercase tracking-[0.16em] opacity-80">
+                          {stage.name === "draft"
+                            ? generationModeLabel(result.generationMode)
+                            : stage.name === "repair"
+                              ? `${result.repairActions} Change${result.repairActions === 1 ? "" : "s"}`
+                              : stage.name === "evaluate"
+                                ? `Coverage ${promptCoveragePercent}%`
+                                : stage.name === "domain fallback"
+                                  ? "Safe runtime fallback"
+                                  : stage.status === "warning"
+                                    ? "Needs review"
+                                    : "Ready"}
+                        </span>
+                      </div>
                       <span className="font-mono text-xs">{stage.durationMs}ms</span>
                     </div>
                     <p className="mt-2 text-xs opacity-80">{stage.message}</p>
@@ -372,6 +507,14 @@ export function AiStudio(): JSX.Element {
                 </div>
               ))}
             </div>
+            <button
+              className="mt-4 inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5"
+              onClick={loadDemoData}
+              type="button"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Load Demo Data
+            </button>
             {currentRuntime ? (
               <p className="mt-4 text-xs text-zinc-500">
                 Current runtime: <span className="text-zinc-300">{currentRuntime.appName}</span>. New configs will ask before replacing it.
@@ -387,13 +530,23 @@ export function AiStudio(): JSX.Element {
                 <h2 className="text-sm font-medium text-zinc-200">Generated runtime</h2>
                 <p className="mt-1 text-xs text-zinc-500">{activeConfig.app.name}</p>
               </div>
-              <button
-                className="rounded-md bg-indigo-electric px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
-                disabled={isApplying}
-                onClick={() => void applyConfig()}
-              >
-                {isApplying ? "Applying..." : currentRuntime ? "Replace & Open App" : "Apply & Open App"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5"
+                  onClick={downloadActiveConfig}
+                  type="button"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download JSON
+                </button>
+                <button
+                  className="rounded-md bg-indigo-electric px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+                  disabled={isApplying}
+                  onClick={() => void applyConfig()}
+                >
+                  {isApplying ? "Applying..." : currentRuntime ? "Replace & Open App" : "Apply & Open App"}
+                </button>
+              </div>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-md bg-black/30 p-3">
@@ -411,6 +564,206 @@ export function AiStudio(): JSX.Element {
             </div>
           </div>
         ) : null}
+
+        {result ? (
+          <div className="rounded-lg border border-line bg-panel p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-medium text-zinc-200">AI Reliability</h2>
+                <p className="mt-1 text-xs text-zinc-500">Reviewer-facing summary of generation quality and repair activity.</p>
+              </div>
+              <span className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] ${generationModeTone(result.generationMode)}`}>
+                {result.generationMode}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-lg border border-line bg-black/25 p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Generation Mode</p>
+                <p className="mt-2 text-sm font-medium text-zinc-100">{generationModeLabel(result.generationMode)}</p>
+              </div>
+              <div className="rounded-lg border border-line bg-black/25 p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Prompt Coverage</p>
+                <p className={`mt-2 text-sm font-medium ${promptCoverageTone(promptCoveragePercent)}`}>{promptCoveragePercent}%</p>
+              </div>
+              <div className="rounded-lg border border-line bg-black/25 p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">AI Confidence Score</p>
+                <p className={`mt-2 text-sm font-medium ${promptCoverageTone(confidenceScore)}`}>{confidenceScore}%</p>
+              </div>
+              <div className="rounded-lg border border-line bg-black/25 p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Repair Actions</p>
+                <p className="mt-2 text-sm font-medium text-zinc-100">{result.repairActions}</p>
+              </div>
+              <div className="rounded-lg border border-line bg-black/25 p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Validation Score</p>
+                <p className="mt-2 text-sm font-medium text-zinc-100">{validationScoreText}</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-line bg-black/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Overall Grade</p>
+                <p className="text-sm font-semibold text-indigo-200">{result.evaluation.grade}</p>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-zinc-800">
+                <div className="h-2 rounded-full bg-indigo-electric" style={{ width: `${scorePercent}%` }} />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-zinc-500">
+                {validationMetric?.notes.join(" ") ?? "Prompt coverage and validation are surfaced above for reviewers."}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-lg border border-line bg-panel p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium text-zinc-200">Reliability Metrics</h2>
+              <p className="mt-1 text-xs text-zinc-500">Aggregated across local generation history.</p>
+            </div>
+            <span className="rounded-full border border-line bg-black/30 px-2.5 py-1 text-[11px] text-zinc-400">
+              {reliability.totalRuns} run(s)
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-line bg-black/25 p-3">
+              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Structured Runs</p>
+              <p className="mt-2 text-sm font-medium text-emerald-200">{reliability.structuredRuns}</p>
+            </div>
+            <div className="rounded-lg border border-line bg-black/25 p-3">
+              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Fallback Runs</p>
+              <p className="mt-2 text-sm font-medium text-yellow-200">{reliability.fallbackRuns}</p>
+            </div>
+            <div className="rounded-lg border border-line bg-black/25 p-3">
+              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Average Repairs</p>
+              <p className="mt-2 text-sm font-medium text-zinc-100">{reliability.averageRepairs.toFixed(2)}</p>
+            </div>
+            <div className="rounded-lg border border-line bg-black/25 p-3">
+              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Repair-Free Runs</p>
+              <p className="mt-2 text-sm font-medium text-zinc-100">{reliability.repairFreeRuns}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-line bg-panel p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium text-zinc-200">Reviewer Insights</h2>
+              <p className="mt-1 text-xs text-zinc-500">Signals that explain why this config was generated.</p>
+            </div>
+            <button
+              className="rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200"
+              onClick={() => setShowReviewerInsights((previous) => !previous)}
+              type="button"
+            >
+              {showReviewerInsights ? "Collapse" : "Expand"}
+            </button>
+          </div>
+
+          {showReviewerInsights ? (
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Detected intent</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {result ? (
+                    <>
+                      {intentSignals.map((signal, index) => (
+                        <span
+                          className={index === 0 ? "rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-xs text-indigo-100" : "rounded-full border border-line bg-black/30 px-2.5 py-1 text-xs text-zinc-300"}
+                          key={`${signal}-${index}`}
+                        >
+                          {signal}
+                        </span>
+                      ))}
+                    </>
+                  ) : (
+                    <span className="text-sm text-zinc-500">Run a generation to inspect intent signals.</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Validation findings</p>
+                {result?.evaluation.blockers.length ? (
+                  <div className="mt-2 space-y-2">
+                    {result.evaluation.blockers.slice(0, 3).map((finding) => (
+                      <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-100" key={finding.path}>
+                        <p className="font-mono">{finding.path}</p>
+                        <p className="mt-1 opacity-80">{finding.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-emerald-300">No blocking findings.</p>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-lg border border-line bg-panel p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+                <History className="h-4 w-4 text-indigo-300" />
+                Generation History
+              </h2>
+              <p className="mt-1 text-xs text-zinc-500">Local evidence of repeated quality runs.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200"
+                onClick={loadDemoData}
+                type="button"
+              >
+                Load Demo Data
+              </button>
+              <span className="rounded-full border border-line bg-black/30 px-2.5 py-1 text-[11px] text-zinc-400">
+                {generationHistory.length}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {generationHistory.length > 0 ? (
+              generationHistory.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setPrompt(entry.prompt)}
+                  className="w-full rounded-lg border border-line bg-black/25 p-3 text-left transition hover:border-indigo-electric/50 hover:bg-indigo-electric/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-zinc-100">{entry.appName}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{new Date(entry.createdAt).toLocaleString()}</p>
+                    </div>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${generationModeTone(entry.generationMode)}`}>
+                      {entry.generationMode}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-md bg-black/30 p-2">
+                      <p className="text-[11px] text-zinc-500">Grade</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-100">{entry.grade}</p>
+                    </div>
+                    <div className="rounded-md bg-black/30 p-2">
+                      <p className="text-[11px] text-zinc-500">Coverage</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-100">{entry.promptCoverage}%</p>
+                    </div>
+                    <div className="rounded-md bg-black/30 p-2">
+                      <p className="text-[11px] text-zinc-500">Repair</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-100">{entry.repairActions}</p>
+                    </div>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="rounded-md border border-line bg-black/25 p-4 text-sm text-zinc-500">
+                Generation history will appear here after you run a prompt.
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="rounded-lg border border-line bg-panel p-4">
           <div className="flex items-center justify-between gap-3">
@@ -452,6 +805,62 @@ export function AiStudio(): JSX.Element {
             </div>
           )}
         </div>
+
+        {result ? (
+          <div className="rounded-lg border border-line bg-panel p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+                  <Columns2 className="h-4 w-4 text-indigo-300" />
+                  Config Diff Viewer
+                </h2>
+                <p className="mt-1 text-xs text-zinc-500">Original draft vs final normalized config.</p>
+              </div>
+              <button
+                className="rounded-md border border-line bg-black/30 px-3 py-2 text-xs text-zinc-200"
+                onClick={() => setShowDiff((previous) => !previous)}
+                type="button"
+              >
+                {showDiff ? "Hide Diff" : "Show Diff"}
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-zinc-500">
+              {changedDiffLines} changed line{changedDiffLines === 1 ? "" : "s"} between the raw draft and the repaired config.
+            </p>
+
+            {showDiff ? (
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Original Draft</p>
+                  <div className="mt-2 max-h-[360px] overflow-auto rounded-md border border-line bg-black/40 font-mono text-[11px] leading-5 text-zinc-300">
+                    {diffLines.map((line) => (
+                      <div className={`grid grid-cols-[3rem_1fr] gap-3 px-3 py-1.5 ${line.changed ? "bg-red-500/10" : ""}`} key={`draft-${line.lineNumber}`}>
+                        <span className="text-zinc-600">{line.lineNumber}</span>
+                        <span className="whitespace-pre-wrap break-words">{line.draft || " "}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Final Config</p>
+                  <div className="mt-2 max-h-[360px] overflow-auto rounded-md border border-line bg-black/40 font-mono text-[11px] leading-5 text-zinc-300">
+                    {diffLines.map((line) => (
+                      <div className={`grid grid-cols-[3rem_1fr] gap-3 px-3 py-1.5 ${line.changed ? "bg-emerald-500/10" : ""}`} key={`final-${line.lineNumber}`}>
+                        <span className="text-zinc-600">{line.lineNumber}</span>
+                        <span className="whitespace-pre-wrap break-words">{line.final || " "}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-md border border-line bg-black/25 p-4 text-sm text-zinc-500">
+                Hidden for now. Toggle the diff viewer when you want to compare the raw draft with the repaired config.
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {(repair?.findings ?? result?.repair.findings ?? []).length > 0 ? (
           <div className="rounded-lg border border-line bg-panel p-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ComponentRendererProps } from "./index";
+import { applyComponentFilter } from "./filters";
 import { humanizeIdentifier } from "@/lib/labels";
 
 function getString(value: unknown, fallback: string): string {
@@ -8,11 +9,12 @@ function getString(value: unknown, fallback: string): string {
 }
 
 const StatCardRenderer = ({ config, data = [] }: ComponentRendererProps): JSX.Element => {
+  const filteredData = applyComponentFilter(data, config);
   const field = getString(config.field, "");
   const aggregation = getString(config.aggregation, "sum");
-  const values = data.map((row) => Number(row[field]) || 0);
+  const values = filteredData.map((row) => Number(row[field]) || 0);
   const sum = values.reduce((total, item) => total + item, 0);
-  const value = aggregation === "count" ? data.length : aggregation === "avg" ? (data.length > 0 ? sum / data.length : 0) : sum;
+  const value = aggregation === "count" ? filteredData.length : aggregation === "avg" ? (filteredData.length > 0 ? sum / filteredData.length : 0) : sum;
   const label = getString(config.label, aggregation === "count" ? "Total Records" : `${humanizeIdentifier(aggregation)} ${humanizeIdentifier(field)}`);
 
   return (

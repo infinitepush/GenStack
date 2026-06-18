@@ -111,6 +111,13 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
             <Sparkles className="h-4 w-4" />
             {t("nav_config")}
           </Link>
+          <Link
+            className="mb-1 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+            href={`/${locale}/summary`}
+          >
+            <BarChart3 className="h-4 w-4" />
+            {t("nav_runtime_overview")}
+          </Link>
 
           <div className="mt-5 border-t border-line pt-5">
             <div className="mb-3 px-2">

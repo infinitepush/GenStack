@@ -13,7 +13,8 @@ const generateSchema = z.object({
 });
 
 const repairSchema = z.object({
-  config: z.unknown()
+  config: z.unknown(),
+  prompt: z.string().optional()
 });
 
 function ok<T>(response: Response<ApiResponse<T>>, data: T): void {
@@ -78,7 +79,7 @@ export function createAiRouter(): Router {
     }
 
     const repair = repairAndValidateConfig(parsed.data.config);
-    ok(response, evaluateConfig(repair.config));
+    ok(response, evaluateConfig(repair.config, parsed.data.prompt));
   });
 
   return router;
