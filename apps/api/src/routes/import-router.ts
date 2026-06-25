@@ -97,7 +97,7 @@ export function createImportRouter(): Router {
     }
 
     try {
-      const userId = typeof request.headers["x-user-id"] === "string" ? request.headers["x-user-id"] : undefined;
+      const userId = request.userId;
       const config = getCurrentConfig();
       const data = await ingestCsvRows(config, parsed.data.uploadId, parsed.data.tableName, parsed.data.mappings, userId);
       

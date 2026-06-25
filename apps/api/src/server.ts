@@ -24,6 +24,7 @@ import { createImportRouter } from "./routes/import-router.js";
 import { createExportRouter } from "./routes/export-router.js";
 import { createDynamicRouter } from "./routes/dynamic-router.js";
 import { createIntegrationsRouter } from "./routes/integrations-router.js";
+import { authMiddleware } from "./lib/auth-middleware.js";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -60,6 +61,7 @@ app.use(
 );
 app.use(express.json({ limit: "6mb" }));
 app.use(pinoHttp({ logger }));
+app.use(authMiddleware);
 
 app.get("/health", async (_request: Request, response: Response) => {
   try {

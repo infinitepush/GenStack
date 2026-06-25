@@ -59,7 +59,8 @@ export default function TranslationsPage(): JSX.Element {
       try {
         const response = await fetch(`${apiBase()}/i18n/generate`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" }
+          headers: { "Content-Type": "application/json" },
+          credentials: "include"
         });
         const body = (await response.json()) as ApiResponse<Record<string, Record<string, string>>>;
         if (body.success && body.data) {
@@ -111,6 +112,7 @@ export default function TranslationsPage(): JSX.Element {
       await fetch(`${apiBase()}/runtime/activity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           type: "TRANSLATIONS_CHANGED",
           message: `Saved changes to translation keys for locale "${selectedLocale}".`
@@ -166,6 +168,7 @@ export default function TranslationsPage(): JSX.Element {
     fetch(`${apiBase()}/runtime/activity`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
         type: "TRANSLATION_EXPORTED",
         message: `Exported translations for locale "${locale}" in ${exportFormat.toUpperCase()} format.`

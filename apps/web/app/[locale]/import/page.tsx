@@ -95,7 +95,7 @@ export default function ImportPage(): JSX.Element {
   useEffect(() => {
     async function loadConfig() {
       try {
-        const res = await fetch(`${apiBase()}/config`, { cache: "no-store" });
+        const res = await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" });
         const body = await res.json();
         if (body.success && body.data?.config) {
           const config = body.data.config as AppConfig;
@@ -140,7 +140,7 @@ export default function ImportPage(): JSX.Element {
     try {
       const body = new FormData();
       body.append("file", file);
-      const response = await fetch(`${apiBase()}/import/upload`, { method: "POST", body });
+      const response = await fetch(`${apiBase()}/import/upload`, { method: "POST", body, credentials: "include" });
       const payload = (await response.json()) as ApiResponse<UploadResult>;
       if (!response.ok || !payload.success || !payload.data) {
         throw new Error(payload.error?.message ?? "Request failed.");
@@ -170,6 +170,7 @@ export default function ImportPage(): JSX.Element {
       const response = await fetch(`${apiBase()}/import/map`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ uploadId: upload.uploadId, tableName, mappings })
       });
       const payload = (await response.json()) as ApiResponse<PreviewResult>;
@@ -197,6 +198,7 @@ export default function ImportPage(): JSX.Element {
       const response = await fetch(`${apiBase()}/import/ingest`, {
         method: "POST",
         headers,
+        credentials: "include",
         body: JSON.stringify({ uploadId: upload.uploadId, tableName, mappings })
       });
       const payload = (await response.json()) as ApiResponse<IngestResult>;
@@ -217,6 +219,7 @@ export default function ImportPage(): JSX.Element {
         await fetch(`${apiBase()}/runtime/activity`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             type: "CSV_IMPORTED",
             message: `Imported CSV data: ${nextResult.inserted} rows ingested successfully into table "${tableName}".`

@@ -119,7 +119,7 @@ export function createDynamicRouter(): Router {
 
       const config = getCurrentConfig();
       const { endpoint, params } = match;
-      const userId = typeof request.headers["x-user-id"] === "string" ? request.headers["x-user-id"] : undefined;
+      const userId = request.userId;
 
       if (endpoint.method === "GET") {
         const result = await listRuntimeRecords(config, endpoint.table, queryFilters(request), userId);

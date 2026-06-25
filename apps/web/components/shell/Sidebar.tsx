@@ -68,6 +68,7 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
       const response = await fetch(`${apiBase()}/config?origin=history-restore`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(entry.config)
       });
       const payload = (await response.json()) as ApiResponse<unknown>;
@@ -91,7 +92,7 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
 
     async function hydrateActiveConfig() {
       try {
-        const response = await fetch(`${apiBase()}/config`, { cache: "no-store" });
+        const response = await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" });
         const body = (await response.json()) as ApiResponse<ConfigEngineResult>;
         if (body.success && body.data?.config) {
           const apiConfig = body.data.config;

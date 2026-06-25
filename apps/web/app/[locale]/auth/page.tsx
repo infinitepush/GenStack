@@ -2,20 +2,27 @@
 
 import { Github, Layers3 } from "lucide-react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { appConfig } from "@/lib/app-config";
 
 export default function AuthPage({ params }: Readonly<{ params: { locale: string } }>): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("piyush89101@gmail.com");
-  const [password, setPassword] = useState("123456");
+  const { data: session } = useSession();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const locale = appConfig.app.locales.includes(params.locale) ? params.locale : appConfig.app.locale;
   const callbackUrl = searchParams.get("callbackUrl") ?? `/${locale}/dashboard`;
+
+  useEffect(() => {
+    if (session) {
+      router.push(`/${locale}/dashboard`);
+    }
+  }, [session, locale, router]);
 
   const handleEmailSignIn = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -74,7 +81,7 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
       <div className="relative w-full rounded-lg border border-line/45 bg-panel p-6 shadow-sm">
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">GenStack</p>
         <h2 className="mt-3 text-xl font-bold text-zinc-100">Sign in</h2>
-        <p className="mt-1 text-xs text-zinc-400">Use demo credentials, or connect GitHub OAuth.</p>
+        <p className="mt-1 text-xs text-zinc-400">Sign in to your GenStack account.</p>
 
         {error ? (
           <div className="mt-4 rounded-md border border-danger/25 bg-danger/5 p-3 text-xs text-danger font-mono">
@@ -109,6 +116,19 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
               </button>
             </form>
           ) : null}
+
+          {process.env.NODE_ENV !== "production" && (
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("piyush89101@gmail.com");
+                setPassword("123456");
+              }}
+              className="w-full rounded-md border border-dashed border-line/80 hover:border-line/100 bg-elevated/10 hover:bg-elevated/20 px-3 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition duration-150"
+            >
+              Fill Development Demo Credentials
+            </button>
+          )}
 
           {appConfig.auth.methods.includes("github") ? (
             <button

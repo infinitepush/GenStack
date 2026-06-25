@@ -21,14 +21,25 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const segments = request.nextUrl.pathname.split("/").filter(Boolean);
   const locale = segments[0] ?? defaultLocale;
   const section = segments[1];
-  const protectedSection = section !== undefined && !["auth", "ai", "config"].includes(section);
+  const protectedSection = section !== undefined && section !== "auth";
 
   if (!authEnabled) {
     return intlMiddleware(request);
   }
 
   if (protectedSection) {
-    const token = await getToken({ req: request });
+    let token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET ?? "",
+      secureCookie: true
+    });
+    if (!token) {
+      token = await getToken({
+        req: request,
+        secret: process.env.NEXTAUTH_SECRET ?? "",
+        secureCookie: false
+      });
+    }
     if (!token) {
       const signInUrl = new URL(`/${locale}/auth`, request.url);
       signInUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);

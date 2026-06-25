@@ -178,6 +178,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body)
   });
   const payload = (await response.json()) as ApiResponse<T>;
@@ -320,7 +321,7 @@ export function AiStudio(): JSX.Element {
       const next = await postJson<{ config: AppConfig; version: number; changes: string[] }>("/config?origin=ai-studio", activeConfig);
       
       // Fetch again to verify
-      const getResponse = await fetch(`${baseUrl}/config`, { cache: "no-store" });
+      const getResponse = await fetch(`${baseUrl}/config`, { cache: "no-store", credentials: "include" });
       const getPayload = (await getResponse.json()) as ApiResponse<{ config: AppConfig }>;
       if (!getResponse.ok || !getPayload.success || !getPayload.data) {
         throw new Error(getPayload.error?.message ?? "Failed to fetch configuration for verification.");

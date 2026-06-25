@@ -84,7 +84,7 @@ export function RuntimeSummary({ locale }: RuntimeSummaryProps): JSX.Element {
 
   const checkHealth = async () => {
     try {
-      const res = await fetch(`${apiBase()}/health`, { cache: "no-store" });
+      const res = await fetch(`${apiBase()}/health`, { cache: "no-store", credentials: "include" });
       if (!res.ok) {
         setHealth(prev => ({
           ...prev,
@@ -122,7 +122,7 @@ export function RuntimeSummary({ locale }: RuntimeSummaryProps): JSX.Element {
 
   const loadConfigAndStats = async () => {
     try {
-      const response = await fetch(`${apiBase()}/config`, { cache: "no-store" });
+      const response = await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" });
       const body = await response.json();
       if (body.success && body.data?.config) {
         const loadedConfig = body.data.config as AppConfig;
@@ -133,7 +133,7 @@ export function RuntimeSummary({ locale }: RuntimeSummaryProps): JSX.Element {
         await Promise.all(
           loadedConfig.database.tables.map(async (table) => {
             try {
-              const res = await fetch(`${apiBase()}/runtime/${encodeURIComponent(table.name)}`, { cache: "no-store" });
+              const res = await fetch(`${apiBase()}/runtime/${encodeURIComponent(table.name)}`, { cache: "no-store", credentials: "include" });
               if (res.ok) {
                 const data = await res.json();
                 if (data.success && Array.isArray(data.data)) {
@@ -154,13 +154,13 @@ export function RuntimeSummary({ locale }: RuntimeSummaryProps): JSX.Element {
 
   const fetchHistoryAndActivities = async () => {
     try {
-      const historyRes = await fetch(`${apiBase()}/config/history`, { cache: "no-store" });
+      const historyRes = await fetch(`${apiBase()}/config/history`, { cache: "no-store", credentials: "include" });
       const historyBody = await historyRes.json();
       if (historyBody.success && Array.isArray(historyBody.data)) {
         setHistory(historyBody.data);
       }
 
-      const activitiesRes = await fetch(`${apiBase()}/runtime/activities`, { cache: "no-store" });
+      const activitiesRes = await fetch(`${apiBase()}/runtime/activities`, { cache: "no-store", credentials: "include" });
       const activitiesBody = await activitiesRes.json();
       if (activitiesBody.success && Array.isArray(activitiesBody.data)) {
         setActivities(activitiesBody.data);
@@ -172,7 +172,7 @@ export function RuntimeSummary({ locale }: RuntimeSummaryProps): JSX.Element {
 
   const loadSheetsStatus = async () => {
     try {
-      const res = await fetch(`${apiBase()}/integrations/sheets/status`, { cache: "no-store" });
+      const res = await fetch(`${apiBase()}/integrations/sheets/status`, { cache: "no-store", credentials: "include" });
       if (res.ok) {
         const body = await res.json();
         if (body.success && body.data) {

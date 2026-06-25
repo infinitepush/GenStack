@@ -78,7 +78,7 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
         if (isMounted) {
           setHasActiveRuntime(true);
         }
-        const response = await fetch(`${apiBase()}/config`, { cache: "no-store" });
+        const response = await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" });
         const body = await parseApiResponse<ConfigEngineResult>(response);
         if (!body.success || !body.data) {
           throw new Error(body.error?.message ?? "Unable to load runtime config.");
@@ -133,7 +133,8 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
       }
       const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}`, {
         cache: "no-store",
-        headers
+        headers,
+        credentials: "include"
       });
       const body = await parseApiResponse<DataRecord[]>(response);
       if (!body.success) {
@@ -163,6 +164,7 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}`, {
       method: "POST",
       headers,
+      credentials: "include",
       body: JSON.stringify(payload)
     });
     const body = await parseApiResponse<DataRecord>(response);
@@ -181,6 +183,7 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, {
       method: "PUT",
       headers,
+      credentials: "include",
       body: JSON.stringify(payload)
     });
     const body = await parseApiResponse<DataRecord>(response);
@@ -198,7 +201,8 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     }
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, {
       method: "DELETE",
-      headers
+      headers,
+      credentials: "include"
     });
     const body = await parseApiResponse<{ id: string }>(response);
     if (!body.success) {

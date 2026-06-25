@@ -35,7 +35,7 @@ export default function IntegrationsPage(): JSX.Element {
 
   const fetchSheetsStatus = async () => {
     try {
-      const response = await fetch(`${apiBase()}/integrations/sheets/status`);
+      const response = await fetch(`${apiBase()}/integrations/sheets/status`, { credentials: "include" });
       if (response.ok) {
         const body = await response.json();
         if (body.success && body.data) {
@@ -50,7 +50,7 @@ export default function IntegrationsPage(): JSX.Element {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const response = await fetch(`${apiBase()}/integrations`);
+        const response = await fetch(`${apiBase()}/integrations`, { credentials: "include" });
         if (!response.ok) {
           throw new Error("Failed to fetch integration settings");
         }
@@ -83,6 +83,7 @@ export default function IntegrationsPage(): JSX.Element {
       const response = await fetch(`${apiBase()}/integrations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(settings)
       });
       if (!response.ok) {
@@ -108,6 +109,7 @@ export default function IntegrationsPage(): JSX.Element {
       const response = await fetch(`${apiBase()}/integrations/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ type, settings })
       });
       if (!response.ok) {

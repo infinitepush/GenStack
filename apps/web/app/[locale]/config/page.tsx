@@ -53,7 +53,7 @@ export default function ConfigPage(): JSX.Element {
 
   const fetchHistory = async () => {
     try {
-      const response = await fetch(`${apiBase()}/config/history`);
+      const response = await fetch(`${apiBase()}/config/history`, { credentials: "include" });
       const body = await response.json();
       if (body.success && Array.isArray(body.data)) {
         setHistory(body.data);
@@ -91,13 +91,14 @@ export default function ConfigPage(): JSX.Element {
         await fetch(`${apiBase()}/config?origin=config-editor`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify(parsed)
         })
       );
 
       // Reload config again from database to verify
       const verified = await readApi<ConfigEngineResult>(
-        await fetch(`${apiBase()}/config`, { cache: "no-store" })
+        await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" })
       );
 
       // Compare hashes (JSON strings)
@@ -132,7 +133,7 @@ export default function ConfigPage(): JSX.Element {
     let isMounted = true;
     async function loadCurrentConfig(): Promise<void> {
       try {
-        const next = await readApi<ConfigEngineResult>(await fetch(`${apiBase()}/config`, { cache: "no-store" }));
+        const next = await readApi<ConfigEngineResult>(await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" }));
         if (isMounted) {
           setResult(next);
           setJson(JSON.stringify(next.config, null, 2));
@@ -159,7 +160,7 @@ export default function ConfigPage(): JSX.Element {
     setIsSaving(true);
     try {
       const next = await readApi<ConfigEngineResult & { version: number; changes: string[] }>(
-        await fetch(`${apiBase()}/config/reset`, { method: "POST" })
+        await fetch(`${apiBase()}/config/reset`, { method: "POST", credentials: "include" })
       );
       setResult(next);
       setJson(JSON.stringify(next.config, null, 2));
@@ -183,6 +184,7 @@ export default function ConfigPage(): JSX.Element {
         await fetch(`${apiBase()}/config/restore`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ version })
         })
       );

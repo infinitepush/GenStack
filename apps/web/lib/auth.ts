@@ -65,6 +65,7 @@ if (appConfig.auth.enabled && appConfig.auth.methods.includes("github")) {
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers,
+  secret: process.env.NEXTAUTH_SECRET ?? "",
   session: {
     strategy: "jwt"
   },

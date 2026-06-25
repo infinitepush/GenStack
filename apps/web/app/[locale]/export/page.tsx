@@ -81,7 +81,7 @@ export default function ExportPage(): JSX.Element {
     if (!job || job.status === "completed" || job.status === "failed") return;
     const interval = window.setInterval(async () => {
       try {
-        const next = await readApi<ExportJob>(await fetch(`${apiBase()}/export/status/${job.id}`));
+        const next = await readApi<ExportJob>(await fetch(`${apiBase()}/export/status/${job.id}`, { credentials: "include" }));
         setJob(next);
 
         if (next.status === "completed") {
@@ -89,6 +89,7 @@ export default function ExportPage(): JSX.Element {
           await fetch(`${apiBase()}/runtime/activity`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({
               type: "GITHUB_EXPORTED",
               message: `Exported Next.js app "${next.repoName}" successfully to GitHub.`
@@ -119,6 +120,7 @@ export default function ExportPage(): JSX.Element {
         await fetch(`${apiBase()}/export/github`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ repoName, token, config: activeConfig })
         })
       );
@@ -138,6 +140,7 @@ export default function ExportPage(): JSX.Element {
       const response = await fetch(`${apiBase()}/export/zip`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ config: activeConfig })
       });
       if (!response.ok) {
@@ -158,6 +161,7 @@ export default function ExportPage(): JSX.Element {
       await fetch(`${apiBase()}/runtime/activity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           type: "ZIP_DOWNLOADED",
           message: `Downloaded local ZIP archive for Next.js app "${activeConfig.app.name}".`
