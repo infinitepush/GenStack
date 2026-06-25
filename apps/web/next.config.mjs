@@ -11,6 +11,14 @@ const nextConfig = {
     externalDir: true
   },
   transpilePackages: ["@genstack/config-types"],
+  async rewrites() {
+    return [
+      {
+        source: "/api/backend/:path*",
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/:path*`
+      }
+    ];
+  },
   webpack(config) {
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),

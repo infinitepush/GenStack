@@ -21,6 +21,9 @@ interface DynamicPageProps {
 }
 
 function apiBase(): string {
+  if (typeof window !== "undefined") {
+    return "/api/backend";
+  }
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 }
 

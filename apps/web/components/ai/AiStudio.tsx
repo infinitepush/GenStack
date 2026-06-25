@@ -174,7 +174,7 @@ function stringifyIntentSignals(intent: PromptIntentSnapshot): string[] {
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const baseUrl = typeof window !== "undefined" ? "/api/backend" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000");
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -316,7 +316,7 @@ export function AiStudio(): JSX.Element {
     }
     setIsApplying(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+      const baseUrl = typeof window !== "undefined" ? "/api/backend" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000");
       
       const next = await postJson<{ config: AppConfig; version: number; changes: string[] }>("/config?origin=ai-studio", activeConfig);
       
