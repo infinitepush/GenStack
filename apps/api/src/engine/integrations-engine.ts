@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
-import { addRuntimeActivity } from "../lib/config-store.js";
+import { addRuntimeActivity, getRuntimeActivities } from "../lib/config-store.js";
 
 export interface IntegrationSettings {
   webhook?: { enabled: boolean; url: string };
@@ -13,16 +13,18 @@ export interface IntegrationSettings {
 
 const INTEGRATION_DB_KEY = "system:integrations";
 
-export async function getIntegrationSettings(): Promise<IntegrationSettings> {
+export async function getIntegrationSettings(userId?: string): Promise<IntegrationSettings> {
+  const resolvedId = userId || "default-user";
+  const key = resolvedId === "default-user" ? INTEGRATION_DB_KEY : `user:${resolvedId}:${INTEGRATION_DB_KEY}`;
   try {
     const record = await prisma.appState.findUnique({
-      where: { key: INTEGRATION_DB_KEY }
+      where: { key }
     });
     if (record && typeof record.value === "object" && record.value !== null) {
       return record.value as unknown as IntegrationSettings;
     }
   } catch (error: unknown) {
-    logger.error({ error }, "Failed to load integration settings");
+    logger.error({ error, userId: resolvedId }, "Failed to load integration settings");
   }
   return {
     webhook: { enabled: false, url: "" },
@@ -31,16 +33,18 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
   };
 }
 
-export async function saveIntegrationSettings(settings: IntegrationSettings): Promise<IntegrationSettings> {
+export async function saveIntegrationSettings(settings: IntegrationSettings, userId?: string): Promise<IntegrationSettings> {
+  const resolvedId = userId || "default-user";
+  const key = resolvedId === "default-user" ? INTEGRATION_DB_KEY : `user:${resolvedId}:${INTEGRATION_DB_KEY}`;
   try {
     await prisma.appState.upsert({
-      where: { key: INTEGRATION_DB_KEY },
+      where: { key },
       update: { value: settings as any },
-      create: { key: INTEGRATION_DB_KEY, value: settings as any }
+      create: { key, value: settings as any }
     });
-    logger.info("Saved integration settings to database");
+    logger.info({ userId: resolvedId }, "Saved integration settings to database");
   } catch (error: unknown) {
-    logger.error({ error }, "Failed to save integration settings");
+    logger.error({ error, userId: resolvedId }, "Failed to save integration settings");
   }
   return settings;
 }
@@ -100,9 +104,9 @@ async function appendToGoogleSheet(
   }
 }
 
-export async function checkSheetsConnection(): Promise<{ connected: boolean; message: string; lastSync: string; rowsSynced: number }> {
+export async function checkSheetsConnection(userId?: string): Promise<{ connected: boolean; message: string; lastSync: string; rowsSynced: number }> {
   try {
-    const settings = await getIntegrationSettings();
+    const settings = await getIntegrationSettings(userId);
     if (!settings.sheets?.enabled || !settings.sheets.spreadsheetId) {
       return { connected: false, message: "Not configured or disabled", lastSync: "Never", rowsSynced: 0 };
     }
@@ -123,18 +127,15 @@ export async function checkSheetsConnection(): Promise<{ connected: boolean; mes
       spreadsheetId: settings.sheets.spreadsheetId
     });
 
-    const activitiesRecord = await prisma.appState.findUnique({ where: { key: "runtime_activities" } });
+    const activitiesList = await getRuntimeActivities(userId);
     let rowsSynced = 0;
     let lastSync = "Never";
-    if (activitiesRecord && Array.isArray(activitiesRecord.value)) {
-      const list = activitiesRecord.value as any[];
-      const sheetActs = list.filter((act: any) => act && typeof act === "object" && act.type === "GOOGLE_SHEETS_SYNC");
-      rowsSynced = sheetActs.length;
-      if (sheetActs.length > 0) {
-        const lastAct = sheetActs[sheetActs.length - 1];
-        if (lastAct && lastAct.timestamp) {
-          lastSync = new Date(String(lastAct.timestamp)).toLocaleTimeString();
-        }
+    const sheetActs = activitiesList.filter((act: any) => act && typeof act === "object" && act.type === "GOOGLE_SHEETS_SYNC");
+    rowsSynced = sheetActs.length;
+    if (sheetActs.length > 0) {
+      const lastAct = sheetActs[sheetActs.length - 1];
+      if (lastAct && lastAct.timestamp) {
+        lastSync = new Date(String(lastAct.timestamp)).toLocaleTimeString();
       }
     }
 
@@ -272,9 +273,10 @@ export async function testIntegration(
 export async function triggerIntegrations(
   tableName: string,
   action: "insert" | "update" | "delete",
-  record: unknown
+  record: unknown,
+  userId?: string
 ): Promise<void> {
-  const settings = await getIntegrationSettings();
+  const settings = await getIntegrationSettings(userId);
 
   const payload = {
     event: `record.${action}`,
@@ -338,7 +340,7 @@ export async function triggerIntegrations(
           throw new Error("Missing Google Service Account credentials");
         }
         await appendToGoogleSheet(spreadsheetId, resolvedName, creds.email, creds.privateKey, record);
-        await addRuntimeActivity("GOOGLE_SHEETS_SYNC", `Successfully synced record update to Google Sheets (Tab: ${resolvedName}).`);
+        await addRuntimeActivity("GOOGLE_SHEETS_SYNC", `Successfully synced record update to Google Sheets (Tab: ${resolvedName}).`, userId);
         logger.info({ spreadsheetId, resolvedName }, "Google Sheets row appended successfully");
       } catch (err: any) {
         logger.error({ error: err.message || String(err), spreadsheetId }, "Google Sheets integration failed");

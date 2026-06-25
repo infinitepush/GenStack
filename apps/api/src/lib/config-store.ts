@@ -4,62 +4,149 @@ import { prisma } from "./prisma.js";
 import { logger } from "./logger.js";
 
 const CONFIG_DB_KEY = "active_config";
-let currentResult: ConfigEngineResult = normalizeAppConfig(demoConfig);
+const userConfigs = new Map<string, ConfigEngineResult>();
 
-export function getCurrentConfig(): AppConfig {
-  return currentResult.config;
+export function getCurrentConfig(userId?: string): AppConfig {
+  return getCurrentConfigResult(userId).config;
 }
 
-export function getCurrentConfigResult(): ConfigEngineResult {
-  return currentResult;
+export function getCurrentConfigResult(userId?: string): ConfigEngineResult {
+  const resolvedId = userId || "default-user";
+  const result = userConfigs.get(resolvedId);
+  return result || normalizeAppConfig(demoConfig);
 }
 
-export function applyConfig(rawConfig: unknown): ConfigEngineResult {
-  currentResult = normalizeAppConfig(rawConfig);
-  
-  prisma.appState
-    .upsert({
-      where: { key: CONFIG_DB_KEY },
-      update: { value: currentResult.config as any },
-      create: { key: CONFIG_DB_KEY, value: currentResult.config as any }
-    })
-    .catch((error: unknown) => {
-      logger.error({ error }, "Failed to persist config to database");
-    });
+export async function loadUserConfig(userId: string): Promise<ConfigEngineResult> {
+  const key = `user:${userId}:active_config`;
+  let result = userConfigs.get(userId);
+  if (result) {
+    return result;
+  }
 
-  return currentResult;
-}
-
-export function resetConfig(): ConfigEngineResult {
-  currentResult = normalizeAppConfig(demoConfig);
-
-  prisma.appState
-    .upsert({
-      where: { key: CONFIG_DB_KEY },
-      update: { value: currentResult.config as any },
-      create: { key: CONFIG_DB_KEY, value: currentResult.config as any }
-    })
-    .catch((error: unknown) => {
-      logger.error({ error }, "Failed to reset config in database");
-    });
-
-  return currentResult;
-}
-
-export async function getConfigHistory(): Promise<any[]> {
   try {
-    const record = await prisma.appState.findUnique({ where: { key: "config_history" } });
+    const record = await prisma.appState.findUnique({
+      where: { key }
+    });
+
+    if (record && record.value) {
+      result = normalizeAppConfig(record.value);
+      logger.info({ userId }, "Loaded user config from database");
+    } else {
+      // Seed default config in database for the user
+      result = normalizeAppConfig(demoConfig);
+      await prisma.appState.upsert({
+        where: { key },
+        update: { value: result.config as any },
+        create: { key, value: result.config as any }
+      });
+      logger.info({ userId }, "Seeded default config in database for user");
+
+      // Seed history for the user
+      const historyKey = `user:${userId}:config_history`;
+      await prisma.appState.upsert({
+        where: { key: historyKey },
+        update: {},
+        create: {
+          key: historyKey,
+          value: [{
+            version: 1,
+            config: result.config,
+            timestamp: new Date().toISOString(),
+            message: "Initial setup",
+            changes: ["✓ Initial configuration loaded"]
+          }] as any
+        }
+      });
+
+      // Seed runtime activities for the user
+      const activityKey = `user:${userId}:runtime_activities`;
+      await prisma.appState.upsert({
+        where: { key: activityKey },
+        update: {},
+        create: {
+          key: activityKey,
+          value: [{
+            type: "RUNTIME_STARTED",
+            message: "Runtime environment initialized successfully",
+            timestamp: new Date().toISOString()
+          }] as any
+        }
+      });
+    }
+
+    userConfigs.set(userId, result);
+    return result;
+  } catch (error: unknown) {
+    logger.error({ error, userId }, "Failed to load config for user from database");
+    const fallback = normalizeAppConfig(demoConfig);
+    userConfigs.set(userId, fallback);
+    return fallback;
+  }
+}
+
+export function applyConfig(rawConfig: unknown, userId?: string): ConfigEngineResult {
+  const result = normalizeAppConfig(rawConfig);
+  const resolvedId = userId || "default-user";
+  userConfigs.set(resolvedId, result);
+
+  const key = resolvedId === "default-user" ? CONFIG_DB_KEY : `user:${resolvedId}:active_config`;
+
+  prisma.appState
+    .upsert({
+      where: { key },
+      update: { value: result.config as any },
+      create: { key, value: result.config as any }
+    })
+    .catch((error: unknown) => {
+      logger.error({ error, userId: resolvedId }, "Failed to persist config to database");
+    });
+
+  return result;
+}
+
+export function resetConfig(userId?: string): ConfigEngineResult {
+  const result = normalizeAppConfig(demoConfig);
+  const resolvedId = userId || "default-user";
+  userConfigs.set(resolvedId, result);
+
+  const key = resolvedId === "default-user" ? CONFIG_DB_KEY : `user:${resolvedId}:active_config`;
+
+  prisma.appState
+    .upsert({
+      where: { key },
+      update: { value: result.config as any },
+      create: { key, value: result.config as any }
+    })
+    .catch((error: unknown) => {
+      logger.error({ error, userId: resolvedId }, "Failed to reset config in database");
+    });
+
+  return result;
+}
+
+export async function getConfigHistory(userId?: string): Promise<any[]> {
+  const resolvedId = userId || "default-user";
+  const key = resolvedId === "default-user" ? "config_history" : `user:${resolvedId}:config_history`;
+  try {
+    const record = await prisma.appState.findUnique({ where: { key } });
     if (record && Array.isArray(record.value)) {
       return record.value;
     }
   } catch (error: unknown) {
-    logger.error({ error }, "Failed to fetch config history");
+    logger.error({ error, userId: resolvedId }, "Failed to fetch config history");
   }
   return [];
 }
 
-export async function addConfigHistoryEntry(config: AppConfig, message: string, changes: string[]): Promise<number> {
-  const current = await getConfigHistory();
+export async function addConfigHistoryEntry(
+  config: AppConfig,
+  message: string,
+  changes: string[],
+  userId?: string
+): Promise<number> {
+  const resolvedId = userId || "default-user";
+  const key = resolvedId === "default-user" ? "config_history" : `user:${resolvedId}:config_history`;
+  const current = await getConfigHistory(userId);
   const nextVersion = current.length + 1;
   const entry = {
     version: nextVersion,
@@ -70,46 +157,50 @@ export async function addConfigHistoryEntry(config: AppConfig, message: string, 
   };
   const next = [...current, entry];
   await prisma.appState.upsert({
-    where: { key: "config_history" },
+    where: { key },
     update: { value: next as any },
-    create: { key: "config_history", value: next as any }
+    create: { key, value: next as any }
   });
   return nextVersion;
 }
 
-export async function restoreConfigVersion(version: number): Promise<ConfigEngineResult> {
-  const history = await getConfigHistory();
+export async function restoreConfigVersion(version: number, userId?: string): Promise<ConfigEngineResult> {
+  const history = await getConfigHistory(userId);
   const entry = history.find((e) => e.version === version);
   if (!entry) {
     throw new Error(`Version ${version} not found in history.`);
   }
-  const result = applyConfig(entry.config);
+  const result = applyConfig(entry.config, userId);
   return result;
 }
 
-export async function getRuntimeActivities(): Promise<any[]> {
+export async function getRuntimeActivities(userId?: string): Promise<any[]> {
+  const resolvedId = userId || "default-user";
+  const key = resolvedId === "default-user" ? "runtime_activities" : `user:${resolvedId}:runtime_activities`;
   try {
-    const record = await prisma.appState.findUnique({ where: { key: "runtime_activities" } });
+    const record = await prisma.appState.findUnique({ where: { key } });
     if (record && Array.isArray(record.value)) {
       return record.value;
     }
   } catch (error: unknown) {
-    logger.error({ error }, "Failed to fetch runtime activities");
+    logger.error({ error, userId: resolvedId }, "Failed to fetch runtime activities");
   }
   return [];
 }
 
-export async function addRuntimeActivity(type: string, message: string): Promise<void> {
+export async function addRuntimeActivity(type: string, message: string, userId?: string): Promise<void> {
+  const resolvedId = userId || "default-user";
+  const key = resolvedId === "default-user" ? "runtime_activities" : `user:${resolvedId}:runtime_activities`;
   try {
-    const current = await getRuntimeActivities();
+    const current = await getRuntimeActivities(userId);
     const next = [...current, { type, message, timestamp: new Date().toISOString() }];
     await prisma.appState.upsert({
-      where: { key: "runtime_activities" },
+      where: { key },
       update: { value: next as any },
-      create: { key: "runtime_activities", value: next as any }
+      create: { key, value: next as any }
     });
   } catch (error: unknown) {
-    logger.error({ error }, "Failed to record runtime activity");
+    logger.error({ error, userId: resolvedId }, "Failed to record runtime activity");
   }
 }
 
@@ -119,17 +210,20 @@ export async function initializeConfigStore(): Promise<void> {
       where: { key: CONFIG_DB_KEY }
     });
 
+    let defaultResult: ConfigEngineResult;
     if (record && record.value) {
-      currentResult = normalizeAppConfig(record.value);
+      defaultResult = normalizeAppConfig(record.value);
       logger.info("Loaded active config from database");
     } else {
+      defaultResult = normalizeAppConfig(demoConfig);
       await prisma.appState.upsert({
         where: { key: CONFIG_DB_KEY },
-        update: { value: currentResult.config as any },
-        create: { key: CONFIG_DB_KEY, value: currentResult.config as any }
+        update: { value: defaultResult.config as any },
+        create: { key: CONFIG_DB_KEY, value: defaultResult.config as any }
       });
       logger.info("Seeded default config in database");
     }
+    userConfigs.set("default-user", defaultResult);
 
     // Seed Config History if empty
     const historyRecord = await prisma.appState.findUnique({ where: { key: "config_history" } });
@@ -141,7 +235,7 @@ export async function initializeConfigStore(): Promise<void> {
           key: "config_history",
           value: [{
             version: 1,
-            config: currentResult.config,
+            config: defaultResult.config,
             timestamp: new Date().toISOString(),
             message: "Initial setup",
             changes: ["✓ Initial configuration loaded"]

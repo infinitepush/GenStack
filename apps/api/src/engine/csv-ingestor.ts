@@ -11,6 +11,7 @@ export interface CsvRowError {
 
 export interface CsvUploadSession {
   id: string;
+  userId?: string | undefined;
   fileName: string;
   headers: string[];
   rows: Record<string, string>[];
@@ -184,8 +185,9 @@ function applyMappings(
   return { data };
 }
 
-export function createUploadSession(file: Express.Multer.File): CsvUploadResult {
+export function createUploadSession(file: Express.Multer.File, userId?: string | undefined): CsvUploadResult {
   const session = parseCsv(file.buffer, file.originalname);
+  session.userId = userId;
   sessions.set(session.id, session);
   return {
     uploadId: session.id,
@@ -201,10 +203,14 @@ export function previewCsvMapping(
   config: AppConfig,
   uploadId: string,
   tableName: string,
-  mappings: Record<string, string>
+  mappings: Record<string, string>,
+  userId?: string
 ): CsvPreviewResult {
   const session = sessions.get(uploadId);
   if (!session) throw new Error("Upload session expired. Upload the CSV again.");
+  if (session.userId && session.userId !== userId) {
+    throw new Error("Unauthorized to access this upload session.");
+  }
   const table = findTable(config, tableName);
   const errors: CsvRowError[] = [];
   const preview: Record<string, unknown>[] = [];
@@ -242,6 +248,9 @@ export async function ingestCsvRows(
 ): Promise<CsvIngestResult> {
   const session = sessions.get(uploadId);
   if (!session) throw new Error("Upload session expired. Upload the CSV again.");
+  if (session.userId && session.userId !== userId) {
+    throw new Error("Unauthorized to access this upload session.");
+  }
   const table = findTable(config, tableName);
   const errors: CsvRowError[] = [];
   const validRows: Record<string, unknown>[] = [];

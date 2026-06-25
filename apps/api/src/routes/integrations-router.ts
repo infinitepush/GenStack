@@ -13,7 +13,7 @@ export function createIntegrationsRouter(): Router {
 
   router.get("/", async (request: Request, response: Response<ApiResponse<IntegrationSettings>>) => {
     try {
-      const data = await getIntegrationSettings();
+      const data = await getIntegrationSettings(request.userId);
       response.json({ success: true, data, error: null });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to load integrations";
@@ -23,7 +23,7 @@ export function createIntegrationsRouter(): Router {
 
   router.post("/", async (request: Request, response: Response<ApiResponse<IntegrationSettings>>) => {
     try {
-      const updated = await saveIntegrationSettings(request.body);
+      const updated = await saveIntegrationSettings(request.body, request.userId);
       response.json({ success: true, data: updated, error: null });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to save integrations";
@@ -44,7 +44,7 @@ export function createIntegrationsRouter(): Router {
 
   router.get("/sheets/status", async (request: Request, response: Response) => {
     try {
-      const status = await checkSheetsConnection();
+      const status = await checkSheetsConnection(request.userId);
       response.json({ success: true, data: status, error: null });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to retrieve sheets status";

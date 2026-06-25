@@ -59,7 +59,7 @@ export function createImportRouter(): Router {
           sendError(response as Response<ApiResponse<never>>, 400, "CSV_REQUIRED", "Upload a CSV file.");
           return;
         }
-        response.json({ success: true, data: createUploadSession(request.file), error: null });
+        response.json({ success: true, data: createUploadSession(request.file, request.userId), error: null });
       } catch (parseError: unknown) {
         sendError(
           response as Response<ApiResponse<never>>,
@@ -81,7 +81,7 @@ export function createImportRouter(): Router {
     try {
       response.json({
         success: true,
-        data: previewCsvMapping(getCurrentConfig(), parsed.data.uploadId, parsed.data.tableName, parsed.data.mappings),
+        data: previewCsvMapping(getCurrentConfig(request.userId), parsed.data.uploadId, parsed.data.tableName, parsed.data.mappings, request.userId),
         error: null
       });
     } catch (error: unknown) {
@@ -98,11 +98,11 @@ export function createImportRouter(): Router {
 
     try {
       const userId = request.userId;
-      const config = getCurrentConfig();
+      const config = getCurrentConfig(userId);
       const data = await ingestCsvRows(config, parsed.data.uploadId, parsed.data.tableName, parsed.data.mappings, userId);
       
       if (data.inserted > 0) {
-        await addRuntimeActivity("CSV_IMPORTED", `Successfully imported ${data.inserted} rows into table ${parsed.data.tableName}.`);
+        await addRuntimeActivity("CSV_IMPORTED", `Successfully imported ${data.inserted} rows into table ${parsed.data.tableName}.`, userId);
       }
       
       response.json({

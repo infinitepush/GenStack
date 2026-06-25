@@ -26,7 +26,8 @@ export function createExportRouter(): Router {
       data: startGitHubExport({
         repoName: parsed.data.repoName,
         token: parsed.data.token,
-        config: normalizeAppConfig(parsed.data.config).config
+        config: normalizeAppConfig(parsed.data.config).config,
+        userId: request.userId
       }),
       error: null
     });
@@ -52,7 +53,7 @@ export function createExportRouter(): Router {
       response.status(400).json({ success: false, data: null, error: { code: "EXPORT_ID_REQUIRED", message: "Export id is required." } });
       return;
     }
-    const job = getExportJob(id);
+    const job = getExportJob(id, request.userId);
     if (!job) {
       response.status(404).json({ success: false, data: null, error: { code: "EXPORT_NOT_FOUND", message: "Export job not found." } });
       return;

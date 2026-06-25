@@ -90,8 +90,8 @@ app.get("/health", async (_request: Request, response: Response) => {
   }
 });
 
-app.get("/config", (_request: Request, response: Response<ApiResponse<ReturnType<typeof getCurrentConfigResult>>>) => {
-  response.json({ success: true, data: getCurrentConfigResult(), error: null });
+app.get("/config", (request: Request, response: Response<ApiResponse<ReturnType<typeof getCurrentConfigResult>>>) => {
+  response.json({ success: true, data: getCurrentConfigResult(request.userId), error: null });
 });
 
 app.post("/config", async (request: Request, response: Response) => {
@@ -102,15 +102,16 @@ app.post("/config", async (request: Request, response: Response) => {
     } else if (request.query.origin === "history-restore") {
       origin = "History Restore";
     }
-    const oldConfig = getCurrentConfig();
-    const result = applyConfig(request.body);
+    const userId = request.userId;
+    const oldConfig = getCurrentConfig(userId);
+    const result = applyConfig(request.body, userId);
     const changes = diffConfigs(oldConfig, result.config);
 
-    const version = await addConfigHistoryEntry(result.config, `Applied from ${origin}`, changes);
+    const version = await addConfigHistoryEntry(result.config, `Applied from ${origin}`, changes, userId);
     if (request.query.origin === "history-restore") {
-      await addRuntimeActivity("RUNTIME_RESTORED", `Restored config v1.0.${version} from sidebar history.`);
+      await addRuntimeActivity("RUNTIME_RESTORED", `Restored config v1.0.${version} from sidebar history.`, userId);
     } else {
-      await addRuntimeActivity("CONFIG_APPLIED", `Applied config v1.0.${version} from ${origin}`);
+      await addRuntimeActivity("CONFIG_APPLIED", `Applied config v1.0.${version} from ${origin}`, userId);
     }
 
     response.json({
@@ -128,14 +129,15 @@ app.post("/config", async (request: Request, response: Response) => {
   }
 });
 
-app.post("/config/reset", async (_request: Request, response: Response) => {
+app.post("/config/reset", async (request: Request, response: Response) => {
   try {
-    const oldConfig = getCurrentConfig();
-    const result = resetConfig();
+    const userId = request.userId;
+    const oldConfig = getCurrentConfig(userId);
+    const result = resetConfig(userId);
     const changes = diffConfigs(oldConfig, result.config);
 
-    const version = await addConfigHistoryEntry(result.config, "Reset to demo baseline", changes);
-    await addRuntimeActivity("CONFIG_RESTORED", `Reset config to demo baseline (v1.0.${version})`);
+    const version = await addConfigHistoryEntry(result.config, "Reset to demo baseline", changes, userId);
+    await addRuntimeActivity("CONFIG_RESTORED", `Reset config to demo baseline (v1.0.${version})`, userId);
 
     response.json({
       success: true,
@@ -152,9 +154,9 @@ app.post("/config/reset", async (_request: Request, response: Response) => {
   }
 });
 
-app.get("/config/history", async (_request: Request, response: Response) => {
+app.get("/config/history", async (request: Request, response: Response) => {
   try {
-    const history = await getConfigHistory();
+    const history = await getConfigHistory(request.userId);
     response.json({ success: true, data: history, error: null });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to load history";
@@ -169,8 +171,9 @@ app.post("/config/restore", async (request: Request, response: Response) => {
       response.status(400).json({ success: false, data: null, error: { code: "INVALID_VERSION", message: "Version must be a number." } });
       return;
     }
-    const result = await restoreConfigVersion(version);
-    await addRuntimeActivity("CONFIG_RESTORED", `Restored config v1.0.${version}`);
+    const userId = request.userId;
+    const result = await restoreConfigVersion(version, userId);
+    await addRuntimeActivity("CONFIG_RESTORED", `Restored config v1.0.${version}`, userId);
     response.json({ success: true, data: result, error: null });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to restore config";
@@ -178,9 +181,9 @@ app.post("/config/restore", async (request: Request, response: Response) => {
   }
 });
 
-app.get("/runtime/activities", async (_request: Request, response: Response) => {
+app.get("/runtime/activities", async (request: Request, response: Response) => {
   try {
-    const activities = await getRuntimeActivities();
+    const activities = await getRuntimeActivities(request.userId);
     response.json({ success: true, data: activities, error: null });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to load activities";
@@ -195,7 +198,7 @@ app.post("/runtime/activity", async (request: Request, response: Response) => {
       response.status(400).json({ success: false, data: null, error: { code: "INVALID_ACTIVITY", message: "Type and message are required." } });
       return;
     }
-    await addRuntimeActivity(type, message);
+    await addRuntimeActivity(type, message, request.userId);
     response.json({ success: true, data: null, error: null });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to save activity";

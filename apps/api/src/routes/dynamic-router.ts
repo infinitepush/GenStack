@@ -53,8 +53,8 @@ function normalizeRuntimePath(path: string): string {
   return normalized.startsWith("/") ? normalized : `/${normalized}`;
 }
 
-function findEndpoint(method: string, requestPath: string): EndpointMatch | undefined {
-  const config = getCurrentConfig();
+function findEndpoint(method: string, requestPath: string, userId?: string): EndpointMatch | undefined {
+  const config = getCurrentConfig(userId);
   const normalizedPath = normalizeRuntimePath(requestPath);
   for (const endpoint of config.api.endpoints) {
     if (endpoint.method !== method.toUpperCase()) {
@@ -88,8 +88,8 @@ function sendError(
   response.status(status).json({ success: false, data: null, error });
 }
 
-function sendEndpointNotFound(response: Response<ApiResponse<unknown>>, method: string, path: string): void {
-  const config = getCurrentConfig();
+function sendEndpointNotFound(response: Response<ApiResponse<unknown>>, method: string, path: string, userId?: string): void {
+  const config = getCurrentConfig(userId);
   const normalizedPath = normalizeRuntimePath(path);
   const available = config.api.endpoints.map((endpoint) => `${endpoint.method} ${endpoint.path}`);
   response.status(404).json({
@@ -110,16 +110,16 @@ export function createDynamicRouter(): Router {
 
   router.use(async (request: Request, response: Response<ApiResponse<unknown>>) => {
     try {
+      const userId = request.userId;
       const requestPath = normalizeRuntimePath(request.path);
-      const match = findEndpoint(request.method, requestPath);
+      const match = findEndpoint(request.method, requestPath, userId);
       if (!match) {
-        sendEndpointNotFound(response, request.method, requestPath);
+        sendEndpointNotFound(response, request.method, requestPath, userId);
         return;
       }
 
-      const config = getCurrentConfig();
+      const config = getCurrentConfig(userId);
       const { endpoint, params } = match;
-      const userId = request.userId;
 
       if (endpoint.method === "GET") {
         const result = await listRuntimeRecords(config, endpoint.table, queryFilters(request), userId);

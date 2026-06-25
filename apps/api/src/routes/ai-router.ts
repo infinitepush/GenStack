@@ -45,7 +45,7 @@ export function createAiRouter(): Router {
       const engine = new PipelineEngine();
       const result = await engine.run(parsed.data);
       if (result.config?.app?.name) {
-        await addRuntimeActivity("GENERATION_COMPLETED", `AI Studio successfully generated configuration for app "${result.config.app.name}" using model Gemini 1.5 Pro.`);
+        await addRuntimeActivity("GENERATION_COMPLETED", `AI Studio successfully generated configuration for app "${result.config.app.name}" using model Gemini 1.5 Pro.`, request.userId);
       }
       ok(response, result);
     } catch (error: unknown) {
@@ -54,7 +54,7 @@ export function createAiRouter(): Router {
         const fallbackEngine = new PipelineEngine(new LocalHeuristicProvider());
         const result = await fallbackEngine.run(parsed.data);
         if (result.config?.app?.name) {
-          await addRuntimeActivity("GENERATION_COMPLETED", `Local fallback successfully generated configuration for app "${result.config.app.name}" due to provider rate limit.`);
+          await addRuntimeActivity("GENERATION_COMPLETED", `Local fallback successfully generated configuration for app "${result.config.app.name}" due to provider rate limit.`, request.userId);
         }
         ok(response, result);
         return;

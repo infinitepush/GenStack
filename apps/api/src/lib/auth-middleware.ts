@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { decode } from "next-auth/jwt";
-import { getCurrentConfig } from "./config-store.js";
+import { getCurrentConfig, loadUserConfig } from "./config-store.js";
 
 // Extend Request type to hold userId
 declare global {
@@ -40,6 +40,7 @@ export async function authMiddleware(request: Request, response: Response, next:
         });
         if (decoded?.sub) {
           request.userId = decoded.sub;
+          await loadUserConfig(request.userId);
         }
       } catch (err) {
         // Token decode failed (expired or invalid signature)

@@ -11,6 +11,7 @@ export interface ExportError {
 
 export interface ExportJob {
   id: string;
+  userId?: string | undefined;
   status: "queued" | "running" | "completed" | "failed";
   stage: string;
   repoName: string;
@@ -161,14 +162,19 @@ async function resolveRepoName(owner: string, desiredName: string, token: string
   return `${base}-${Date.now()}`;
 }
 
-export function getExportJob(id: string): ExportJob | undefined {
-  return jobs.get(id);
+export function getExportJob(id: string, userId?: string): ExportJob | undefined {
+  const job = jobs.get(id);
+  if (job && job.userId && job.userId !== userId) {
+    return undefined;
+  }
+  return job;
 }
 
-export function startGitHubExport(input: { config: AppConfig; token: string; repoName: string }): ExportJob {
+export function startGitHubExport(input: { config: AppConfig; token: string; repoName: string; userId?: string | undefined }): ExportJob {
   const id = randomUUID();
   const job: ExportJob = {
     id,
+    userId: input.userId,
     status: "queued",
     stage: "Queued",
     repoName: slugify(input.repoName),
@@ -221,5 +227,5 @@ async function runExport(job: ExportJob, input: { config: AppConfig; token: stri
 
   job.stage = "Finalizing";
   job.status = "completed";
-  await addRuntimeActivity("GITHUB_EXPORTED", `Successfully exported application repository "${repoName}" to GitHub (${job.repoUrl}).`);
+  await addRuntimeActivity("GITHUB_EXPORTED", `Successfully exported application repository "${repoName}" to GitHub (${job.repoUrl}).`, job.userId);
 }

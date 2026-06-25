@@ -180,7 +180,7 @@ export async function createRuntimeRecord(
   });
 
   const record = toRuntimeRecord(row);
-  void triggerIntegrations(tableName, "insert", record);
+  void triggerIntegrations(tableName, "insert", record, userId);
   return { record };
 }
 
@@ -216,7 +216,7 @@ export async function updateRuntimeRecord(
   });
 
   const record = toRuntimeRecord(row);
-  void triggerIntegrations(tableName, "update", record);
+  void triggerIntegrations(tableName, "update", record, userId);
   return { record };
 }
 
@@ -241,6 +241,6 @@ export async function deleteRuntimeRecord(
   }
 
   await prisma.generatedRecord.delete({ where: { id } });
-  void triggerIntegrations(tableName, "delete", { id });
+  void triggerIntegrations(tableName, "delete", { id }, userId);
   return { id };
 }

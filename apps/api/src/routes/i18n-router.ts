@@ -23,7 +23,7 @@ export function createI18nRouter(): Router {
       return;
     }
 
-    const config = parsed.data.config == null ? getCurrentConfig() : normalizeAppConfig(parsed.data.config).config;
+    const config = parsed.data.config == null ? getCurrentConfig(request.userId) : normalizeAppConfig(parsed.data.config).config;
     response.json({
       success: true,
       data: generateI18nMessages(config),
