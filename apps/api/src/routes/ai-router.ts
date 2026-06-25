@@ -6,6 +6,7 @@ import { createAiProvider, LocalHeuristicProvider } from "../engine/providers.js
 import { repairAndValidateConfig } from "../engine/repair-engine.js";
 import type { ApiResponse, EvaluationResult, PipelineRunResult, RepairResult } from "../engine/types.js";
 import { logger } from "../lib/logger.js";
+import { addRuntimeActivity } from "../lib/config-store.js";
 
 const generateSchema = z.object({
   prompt: z.string().min(1),
@@ -42,12 +43,20 @@ export function createAiRouter(): Router {
 
     try {
       const engine = new PipelineEngine();
-      ok(response, await engine.run(parsed.data));
+      const result = await engine.run(parsed.data);
+      if (result.config?.app?.name) {
+        await addRuntimeActivity("GENERATION_COMPLETED", `AI Studio successfully generated configuration for app "${result.config.app.name}" using model Gemini 1.5 Pro.`);
+      }
+      ok(response, result);
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes("AI provider returned 429")) {
         logger.warn({ error: error.message }, "AI provider rate limited; using local fallback provider");
         const fallbackEngine = new PipelineEngine(new LocalHeuristicProvider());
-        ok(response, await fallbackEngine.run(parsed.data));
+        const result = await fallbackEngine.run(parsed.data);
+        if (result.config?.app?.name) {
+          await addRuntimeActivity("GENERATION_COMPLETED", `Local fallback successfully generated configuration for app "${result.config.app.name}" due to provider rate limit.`);
+        }
+        ok(response, result);
         return;
       }
 

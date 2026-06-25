@@ -119,9 +119,10 @@ export function createDynamicRouter(): Router {
 
       const config = getCurrentConfig();
       const { endpoint, params } = match;
+      const userId = typeof request.headers["x-user-id"] === "string" ? request.headers["x-user-id"] : undefined;
 
       if (endpoint.method === "GET") {
-        const result = await listRuntimeRecords(config, endpoint.table, queryFilters(request));
+        const result = await listRuntimeRecords(config, endpoint.table, queryFilters(request), userId);
         if (result.error) {
           sendError(response, 400, "UNKNOWN_TABLE", result.error);
           return;
@@ -131,7 +132,7 @@ export function createDynamicRouter(): Router {
       }
 
       if (endpoint.method === "POST") {
-        const result = await createRuntimeRecord(config, endpoint.table, request.body);
+        const result = await createRuntimeRecord(config, endpoint.table, request.body, userId);
         if (result.error) {
           sendError(response, 400, "UNKNOWN_TABLE", result.error);
           return;
@@ -151,7 +152,7 @@ export function createDynamicRouter(): Router {
       }
 
       if (endpoint.method === "PUT") {
-        const result = await updateRuntimeRecord(config, endpoint.table, id, request.body);
+        const result = await updateRuntimeRecord(config, endpoint.table, id, request.body, userId);
         if (result.error) {
           sendError(response, 404, "RECORD_NOT_FOUND", result.error);
           return;
@@ -165,7 +166,7 @@ export function createDynamicRouter(): Router {
       }
 
       if (endpoint.method === "DELETE") {
-        const result = await deleteRuntimeRecord(config, endpoint.table, id);
+        const result = await deleteRuntimeRecord(config, endpoint.table, id, userId);
         if (result.error) {
           sendError(response, 404, "RECORD_NOT_FOUND", result.error);
           return;

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { normalizeAppConfig } from "@genstack/config-types";
 import { getExportJob, startGitHubExport, type ExportJob } from "../engine/github-exporter.js";
+import { exportProjectAsZip } from "../engine/zip-exporter.js";
 import type { ApiResponse } from "../engine/types.js";
 
 const exportSchema = z.object({
@@ -29,6 +30,20 @@ export function createExportRouter(): Router {
       }),
       error: null
     });
+  });
+
+  router.post("/zip", async (request: Request, response: Response) => {
+    try {
+      const config = normalizeAppConfig(request.body.config).config;
+      const buffer = await exportProjectAsZip(config);
+      
+      response.setHeader("Content-Type", "application/zip");
+      response.setHeader("Content-Disposition", `attachment; filename="${config.app.name || "generated-app"}.zip"`);
+      response.status(200).send(buffer);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to generate ZIP archive.";
+      response.status(500).json({ success: false, data: null, error: { code: "ZIP_EXPORT_FAILED", message } });
+    }
   });
 
   router.get("/status/:id", (request: Request, response: Response<ApiResponse<ExportJob>>) => {

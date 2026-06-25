@@ -1,6 +1,9 @@
-import { redirect } from "next/navigation";
-import { appConfig } from "@/lib/app-config";
+import LandingPageContent from "../LandingPageContent";
 
-export default function LocaleIndex(): never {
-  redirect(`/${appConfig.app.locale}/ai`);
+export default function LocaleIndex({
+  params
+}: {
+  params: { locale: string };
+}): JSX.Element {
+  return <LandingPageContent locale={params.locale} />;
 }

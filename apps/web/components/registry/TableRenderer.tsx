@@ -108,10 +108,10 @@ const TableRenderer = ({ config, data = [], onDeleteRecord, onUpdateRecord, sour
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-panel">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-3">
+    <div className="overflow-hidden rounded-lg border border-line/45 bg-panel shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line/45 p-5">
         <input
-          className="h-9 min-w-64 rounded-md border border-line bg-black/40 px-3 text-sm text-zinc-100 outline-none focus:border-indigo-electric"
+          className="h-9 min-w-64 rounded-md border border-line/60 bg-[#121212] px-3 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition duration-150 focus:border-accent focus:ring-0"
           onChange={(event) => {
             setSearch(event.target.value);
             setPage(1);
@@ -119,84 +119,88 @@ const TableRenderer = ({ config, data = [], onDeleteRecord, onUpdateRecord, sour
           placeholder={`Search ${sourceName ? humanizeIdentifier(sourceName).toLowerCase() : "records"}...`}
           value={search}
         />
-        <p className="text-xs text-zinc-500">
-          {filteredData.length} of {baseData.length} record(s)
+        <p className="text-xs text-zinc-500 font-mono">
+          {filteredData.length} of {baseData.length} records
         </p>
       </div>
-      <table className="w-full table-fixed">
-        <thead className="bg-white/5">
-          <tr>
-            {columns.map((column) => (
-              <th key={column} className="px-4 py-3 text-left text-sm text-zinc-300">
-                <button className="inline-flex items-center gap-1 text-left hover:text-white" onClick={() => toggleSort(column)} type="button">
-                  {humanizeIdentifier(column)}
-                  <span className="font-mono text-[10px] text-zinc-500">
-                    {sort?.column === column ? (sort.direction === "asc" ? "A-Z" : "Z-A") : ""}
-                  </span>
-                </button>
-              </th>
-            ))}
-            {hasActions ? <th className="w-32 px-4 py-3 text-right text-sm text-zinc-300">Actions</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {visibleData.map((row, index) => (
-            <tr key={String(row.id ?? index)} className="border-t border-line">
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed border-collapse">
+          <thead className="bg-elevated/10 border-b border-line/45">
+            <tr>
               {columns.map((column) => (
-                <td key={column} className="px-4 py-3 text-sm text-zinc-400">
-                  {editingId === String(row.id ?? "") ? (
-                    <input
-                      className="h-9 w-full rounded-md border border-line bg-black/40 px-2 text-sm text-zinc-100"
-                      onChange={(event) => setDraft((previous) => ({ ...previous, [column]: event.target.value }))}
-                      value={draft[column] ?? ""}
-                    />
-                  ) : (
-                    <span className="block truncate">{String(row[column] ?? "-")}</span>
-                  )}
-                </td>
+                <th key={column} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 font-mono">
+                  <button className="inline-flex items-center gap-1.5 text-left hover:text-zinc-200 transition duration-150" onClick={() => toggleSort(column)} type="button">
+                    {humanizeIdentifier(column)}
+                    {sort?.column === column ? (
+                      <span className="inline-flex items-center justify-center rounded bg-accent/10 px-1 py-0.5 text-[9px] font-bold text-accent">
+                        {sort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    ) : null}
+                  </button>
+                </th>
               ))}
-              {hasActions ? (
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-1">
-                    {editingId === String(row.id ?? "") ? (
-                      <>
-                        <button aria-label="Save row" className="rounded-md border border-line p-2 text-emerald-300 hover:bg-white/5" disabled={pendingId === String(row.id ?? "")} onClick={() => void saveEdit()} type="button">
-                          <Save className="h-4 w-4" />
-                        </button>
-                        <button aria-label="Cancel edit" className="rounded-md border border-line p-2 text-zinc-400 hover:bg-white/5" onClick={() => setEditingId(null)} type="button">
-                          <X className="h-4 w-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {onUpdateRecord ? (
-                          <button aria-label="Edit row" className="rounded-md border border-line p-2 text-zinc-300 hover:bg-white/5" onClick={() => startEdit(row)} type="button">
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                        {onDeleteRecord ? (
-                          <button aria-label="Delete row" className="rounded-md border border-line p-2 text-red-300 hover:bg-red-500/10" disabled={pendingId === String(row.id ?? "")} onClick={() => void deleteRow(String(row.id ?? ""))} type="button">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </td>
-              ) : null}
+              {hasActions ? <th className="w-32 px-4 py-3 text-right text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 font-mono">Actions</th> : null}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="flex items-center justify-between border-t border-line p-3 text-sm text-zinc-400">
-        <span>
+          </thead>
+          <tbody className="divide-y divide-line/30">
+            {visibleData.map((row, index) => (
+              <tr key={String(row.id ?? index)} className="hover:bg-elevated/10 transition-colors duration-150">
+                {columns.map((column) => (
+                  <td key={column} className="px-4 py-3.5 text-xs text-zinc-300">
+                    {editingId === String(row.id ?? "") ? (
+                      <input
+                        className="h-8 w-full rounded-md border border-line bg-elevated/45 px-2.5 text-xs text-zinc-100 outline-none focus:border-accent focus:ring-0"
+                        onChange={(event) => setDraft((previous) => ({ ...previous, [column]: event.target.value }))}
+                        value={draft[column] ?? ""}
+                      />
+                    ) : (
+                      <span className="block truncate">{String(row[column] ?? "-")}</span>
+                    )}
+                  </td>
+                ))}
+                {hasActions ? (
+                  <td className="px-4 py-3.5">
+                    <div className="flex justify-end gap-1">
+                      {editingId === String(row.id ?? "") ? (
+                        <>
+                          <button aria-label="Save row" className="rounded-md p-1.5 text-success hover:bg-success/10 transition duration-150" disabled={pendingId === String(row.id ?? "")} onClick={() => void saveEdit()} type="button">
+                            <Save className="h-3.5 w-3.5" />
+                          </button>
+                          <button aria-label="Cancel edit" className="rounded-md p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-elevated/30 transition duration-150" onClick={() => setEditingId(null)} type="button">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {onUpdateRecord ? (
+                            <button aria-label="Edit row" className="rounded-md p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-elevated/30 transition duration-150" onClick={() => startEdit(row)} type="button">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                          {onDeleteRecord ? (
+                            <button aria-label="Delete row" className="rounded-md p-1.5 text-zinc-500 hover:text-danger hover:bg-danger/10 transition duration-150" disabled={pendingId === String(row.id ?? "")} onClick={() => void deleteRow(String(row.id ?? ""))} type="button">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center justify-between border-t border-line/45 p-5 text-xs text-zinc-400">
+        <span className="font-mono">
           Page {Math.min(page, pageCount)} of {pageCount}
         </span>
         <div className="flex gap-2">
-          <button className="rounded-md border border-line px-3 py-1.5 disabled:opacity-50" disabled={page <= 1} onClick={() => setPage((previous) => Math.max(1, previous - 1))} type="button">
+          <button className="rounded-md border border-line/40 bg-elevated/25 px-3 py-1.5 text-zinc-300 transition hover:bg-elevated/50 hover:text-zinc-100 disabled:opacity-40" disabled={page <= 1} onClick={() => setPage((previous) => Math.max(1, previous - 1))} type="button">
             Previous
           </button>
-          <button className="rounded-md border border-line px-3 py-1.5 disabled:opacity-50" disabled={page >= pageCount} onClick={() => setPage((previous) => Math.min(pageCount, previous + 1))} type="button">
+          <button className="rounded-md border border-line/40 bg-elevated/25 px-3 py-1.5 text-zinc-300 transition hover:bg-elevated/50 hover:text-zinc-100 disabled:opacity-40" disabled={page >= pageCount} onClick={() => setPage((previous) => Math.min(pageCount, previous + 1))} type="button">
             Next
           </button>
         </div>

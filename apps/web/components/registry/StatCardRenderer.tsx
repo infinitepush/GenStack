@@ -18,9 +18,9 @@ const StatCardRenderer = ({ config, data = [] }: ComponentRendererProps): JSX.El
   const label = getString(config.label, aggregation === "count" ? "Total Records" : `${humanizeIdentifier(aggregation)} ${humanizeIdentifier(field)}`);
 
   return (
-    <div className="rounded-lg border border-line bg-panel p-6">
-      <p className="text-sm text-zinc-400">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-indigo-300">{value.toLocaleString()}</p>
+    <div className="rounded-lg border border-line/45 bg-panel p-6 shadow-sm transition hover:border-line/75 duration-150">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 font-mono">{label}</p>
+      <p className="mt-1.5 text-2xl font-bold text-zinc-100 font-mono">{value.toLocaleString()}</p>
     </div>
   );
 };

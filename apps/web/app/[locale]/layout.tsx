@@ -1,6 +1,6 @@
 import { Toaster } from "sonner";
 import { NextIntlClientProvider } from "next-intl";
-import { Sidebar } from "@/components/shell/Sidebar";
+import { LayoutWrapper } from "@/components/shell/LayoutWrapper";
 import { appConfig } from "@/lib/app-config";
 
 export default async function LocaleLayout({
@@ -13,10 +13,7 @@ export default async function LocaleLayout({
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
       <div className="min-h-screen bg-background text-zinc-50">
-        <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
-          <Sidebar locale={locale} />
-          <main className="min-w-0 px-5 py-6 lg:px-8">{children}</main>
-        </div>
+        <LayoutWrapper locale={locale}>{children}</LayoutWrapper>
         <Toaster theme="dark" position="bottom-right" richColors />
       </div>
     </NextIntlClientProvider>

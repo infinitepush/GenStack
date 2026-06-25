@@ -34,9 +34,9 @@ export function getComponentRenderer(type: string): ComponentType<ComponentRende
 
 function UnknownComponentFallback({ config }: ComponentRendererProps): JSX.Element {
   return (
-    <div className="rounded-lg border border-yellow-500/60 bg-yellow-500/10 p-4">
-      <p className="font-semibold text-yellow-100">Unknown component: {config.type}</p>
-      <p className="mt-1 text-sm text-yellow-200">This component type is not registered yet.</p>
+    <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-4">
+      <p className="text-xs font-semibold text-yellow-200">Unknown component: {config.type}</p>
+      <p className="mt-1 text-xs text-yellow-300/80 leading-relaxed">This component type is not registered yet.</p>
     </div>
   );
 }

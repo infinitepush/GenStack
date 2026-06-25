@@ -1,6 +1,7 @@
 import type { AppConfig, DatabaseTableConfig, FieldConfig } from "@genstack/config-types";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { triggerIntegrations } from "./integrations-engine.js";
 
 export interface RuntimeRecord {
   id: string;
@@ -135,16 +136,17 @@ function matchesFilters(record: RuntimeRecord, filters: Record<string, string>):
 export async function listRuntimeRecords(
   config: AppConfig,
   tableName: string,
-  filters: Record<string, string>
+  filters: Record<string, string>,
+  userId?: string
 ): Promise<{ records: RuntimeRecord[]; error?: string }> {
   const table = tableFor(config, tableName);
   if (!table) {
     return { records: [], error: `Unknown table "${tableName}". Add it to config.database.tables first.` };
   }
 
-  const userId = await ensureRuntimeUser();
+  const resolvedUserId = userId || (await ensureRuntimeUser());
   const rows = await prisma.generatedRecord.findMany({
-    where: { appKey: appKey(config), tableName, userId },
+    where: { appKey: appKey(config), tableName, userId: resolvedUserId },
     orderBy: { createdAt: "desc" }
   });
   const records = rows.map(toRuntimeRecord);
@@ -154,7 +156,8 @@ export async function listRuntimeRecords(
 export async function createRuntimeRecord(
   config: AppConfig,
   tableName: string,
-  body: unknown
+  body: unknown,
+  userId?: string
 ): Promise<{ record?: RuntimeRecord; errors?: string[]; error?: string }> {
   const table = tableFor(config, tableName);
   if (!table) {
@@ -166,24 +169,27 @@ export async function createRuntimeRecord(
     return { errors: validation.errors };
   }
 
-  const userId = await ensureRuntimeUser();
+  const resolvedUserId = userId || (await ensureRuntimeUser());
   const row = await prisma.generatedRecord.create({
     data: {
       appKey: appKey(config),
       tableName,
       data: validation.data,
-      userId
+      userId: resolvedUserId
     }
   });
 
-  return { record: toRuntimeRecord(row) };
+  const record = toRuntimeRecord(row);
+  void triggerIntegrations(tableName, "insert", record);
+  return { record };
 }
 
 export async function updateRuntimeRecord(
   config: AppConfig,
   tableName: string,
   id: string,
-  body: unknown
+  body: unknown,
+  userId?: string
 ): Promise<{ record?: RuntimeRecord; errors?: string[]; error?: string }> {
   const table = tableFor(config, tableName);
   if (!table) {
@@ -195,9 +201,9 @@ export async function updateRuntimeRecord(
     return { errors: validation.errors };
   }
 
-  const userId = await ensureRuntimeUser();
+  const resolvedUserId = userId || (await ensureRuntimeUser());
   const existing = await prisma.generatedRecord.findFirst({
-    where: { id, appKey: appKey(config), tableName, userId }
+    where: { id, appKey: appKey(config), tableName, userId: resolvedUserId }
   });
   if (!existing) {
     return { error: `Record "${id}" was not found in "${tableName}".` };
@@ -209,22 +215,25 @@ export async function updateRuntimeRecord(
     data: { data: { ...previousData, ...validation.data } }
   });
 
-  return { record: toRuntimeRecord(row) };
+  const record = toRuntimeRecord(row);
+  void triggerIntegrations(tableName, "update", record);
+  return { record };
 }
 
 export async function deleteRuntimeRecord(
   config: AppConfig,
   tableName: string,
-  id: string
+  id: string,
+  userId?: string
 ): Promise<{ id?: string; error?: string }> {
   const table = tableFor(config, tableName);
   if (!table) {
     return { error: `Unknown table "${tableName}". Add it to config.database.tables first.` };
   }
 
-  const userId = await ensureRuntimeUser();
+  const resolvedUserId = userId || (await ensureRuntimeUser());
   const existing = await prisma.generatedRecord.findFirst({
-    where: { id, appKey: appKey(config), tableName, userId },
+    where: { id, appKey: appKey(config), tableName, userId: resolvedUserId },
     select: { id: true }
   });
   if (!existing) {
@@ -232,5 +241,6 @@ export async function deleteRuntimeRecord(
   }
 
   await prisma.generatedRecord.delete({ where: { id } });
+  void triggerIntegrations(tableName, "delete", { id });
   return { id };
 }

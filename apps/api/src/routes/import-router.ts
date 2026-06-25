@@ -10,7 +10,7 @@ import {
   type CsvUploadResult
 } from "../engine/csv-ingestor.js";
 import type { ApiResponse } from "../engine/types.js";
-import { getCurrentConfig } from "../lib/config-store.js";
+import { getCurrentConfig, addRuntimeActivity } from "../lib/config-store.js";
 import { logger } from "../lib/logger.js";
 
 const upload = multer({
@@ -98,9 +98,16 @@ export function createImportRouter(): Router {
 
     try {
       const userId = typeof request.headers["x-user-id"] === "string" ? request.headers["x-user-id"] : undefined;
+      const config = getCurrentConfig();
+      const data = await ingestCsvRows(config, parsed.data.uploadId, parsed.data.tableName, parsed.data.mappings, userId);
+      
+      if (data.inserted > 0) {
+        await addRuntimeActivity("CSV_IMPORTED", `Successfully imported ${data.inserted} rows into table ${parsed.data.tableName}.`);
+      }
+      
       response.json({
         success: true,
-        data: await ingestCsvRows(getCurrentConfig(), parsed.data.uploadId, parsed.data.tableName, parsed.data.mappings, userId),
+        data,
         error: null
       });
     } catch (error: unknown) {

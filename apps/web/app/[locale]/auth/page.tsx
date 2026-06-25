@@ -47,47 +47,46 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
   };
 
   return (
-    <div className="relative mx-auto grid min-h-[72vh] max-w-5xl items-center gap-8 overflow-hidden rounded-2xl border border-line bg-panel/60 p-6 shadow-2xl shadow-black/30 lg:grid-cols-[1fr_420px]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(99,102,241,0.24),transparent_24rem),radial-gradient(circle_at_85%_80%,rgba(14,165,233,0.12),transparent_20rem)]" />
+    <div className="relative mx-auto grid min-h-[72vh] max-w-5xl items-center gap-10 overflow-hidden rounded-lg border border-line/45 bg-panel p-8 shadow-sm lg:grid-cols-[1fr_420px]">
       <div className="relative hidden lg:block">
-        <Link className="inline-flex items-center gap-3" href="/">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-indigo-electric text-white shadow-lg shadow-indigo-500/30">
+        <Link className="inline-flex items-center gap-2.5" href="/">
+          <div className="grid h-10 w-10 place-items-center rounded-md border border-line bg-elevated text-zinc-300">
             <Layers3 className="h-5 w-5" />
           </div>
           <div>
-            <p className="font-semibold">GenStack</p>
-            <p className="text-xs text-zinc-500">AI Runtime Studio</p>
+            <p className="font-semibold text-zinc-200">GenStack</p>
+            <p className="text-xs text-zinc-500 font-mono">AI Runtime Studio</p>
           </div>
         </Link>
-        <h1 className="mt-10 max-w-md text-4xl font-semibold leading-tight">Sign in when you are ready to save and ship.</h1>
-        <p className="mt-4 max-w-md text-sm leading-6 text-zinc-400">
+        <h1 className="mt-12 max-w-md text-2xl font-bold text-zinc-100 leading-tight">Sign in when you are ready to save and ship.</h1>
+        <p className="mt-4 max-w-md text-xs leading-relaxed text-zinc-400">
           The demo remains open for fast review. Authentication is available for GitHub OAuth and local credentials.
         </p>
         <div className="mt-8 grid max-w-sm gap-3">
           {["Prompt to config", "Runtime-ready dashboards", "CRUD data persistence"].map((item) => (
-            <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-300" key={item}>
+            <div className="rounded-md border border-line/50 bg-elevated/20 px-4 py-2 text-xs text-zinc-300 font-medium" key={item}>
               {item}
             </div>
           ))}
         </div>
       </div>
 
-      <div className="relative w-full rounded-xl border border-line bg-black/45 p-6 shadow-2xl shadow-black/40 backdrop-blur">
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-electric">GenStack</p>
-        <h2 className="mt-3 text-2xl font-semibold">Sign in</h2>
-        <p className="mt-2 text-sm text-zinc-500">Use demo credentials, or connect GitHub OAuth.</p>
+      <div className="relative w-full rounded-lg border border-line/45 bg-panel p-6 shadow-sm">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">GenStack</p>
+        <h2 className="mt-3 text-xl font-bold text-zinc-100">Sign in</h2>
+        <p className="mt-1 text-xs text-zinc-400">Use demo credentials, or connect GitHub OAuth.</p>
 
         {error ? (
-          <div className="mt-4 rounded-md border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-100">
+          <div className="mt-4 rounded-md border border-danger/25 bg-danger/5 p-3 text-xs text-danger font-mono">
             {error}
           </div>
         ) : null}
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-5 space-y-3">
           {appConfig.auth.methods.includes("email") ? (
             <form className="space-y-3" onSubmit={(event) => void handleEmailSignIn(event)}>
               <input
-                className="w-full rounded-md border border-line bg-black/40 px-3 py-2 text-sm outline-none ring-indigo-electric/40 focus:ring-2"
+                className="h-9 w-full rounded-md border border-line/50 bg-elevated/45 px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
@@ -95,7 +94,7 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
                 autoComplete="email"
               />
               <input
-                className="w-full rounded-md border border-line bg-black/40 px-3 py-2 text-sm outline-none ring-indigo-electric/40 focus:ring-2"
+                className="h-9 w-full rounded-md border border-line/50 bg-elevated/45 px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
@@ -104,7 +103,7 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
               />
               <button
                 disabled={isSubmitting}
-                className="w-full rounded-md bg-indigo-electric px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="w-full rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 shadow-none"
               >
                 {isSubmitting ? "Signing in..." : "Continue with email"}
               </button>
@@ -115,13 +114,19 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
             <button
               type="button"
               onClick={handleGitHubSignIn}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-line bg-black/30 px-3 py-2 text-sm font-medium text-zinc-100"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-line bg-elevated/25 hover:bg-elevated/45 px-3 py-2 text-xs font-semibold text-zinc-200 transition duration-150"
             >
-              <Github className="h-4 w-4" />
+              <Github className="h-3.5 w-3.5" />
               Continue with GitHub
             </button>
           ) : null}
         </div>
+        <p className="mt-5 text-center text-xs text-zinc-500">
+          Don&apos;t have an account?{" "}
+          <Link className="text-accent hover:underline font-semibold" href={`/${locale}/auth/register`}>
+            Sign Up
+          </Link>
+        </p>
       </div>
     </div>
   );

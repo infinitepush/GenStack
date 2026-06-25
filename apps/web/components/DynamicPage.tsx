@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import type { AppConfig, ComponentConfig, ConfigEngineResult, DatabaseTableConfig, PageConfig } from "@genstack/config-types";
 import { getComponentRenderer, type DataRecord } from "@/components/registry";
 import { getActiveRuntime } from "@/lib/runtime-history";
@@ -53,6 +54,7 @@ async function parseApiResponse<T>(response: Response): Promise<ApiResponse<T>> 
 
 export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
   const t = useTranslations();
+  const { data: session } = useSession();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [dataByTable, setDataByTable] = useState<Record<string, DataRecord[]>>({});
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
@@ -98,10 +100,17 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     }
 
     void loadConfig();
+
+    const onApplied = (): void => {
+      void loadConfig();
+    };
+    window.addEventListener("genstack:config-applied", onApplied);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("genstack:config-applied", onApplied);
     };
-  }, []);
+  }, [route]);
 
   const page = useMemo(() => (config ? findPage(config, route) : undefined), [config, route]);
   const dataSources = useMemo(() => {
@@ -118,7 +127,14 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
   const loadTable = useCallback(async (tableName: string): Promise<void> => {
     setLoadingTables((previous) => ({ ...previous, [tableName]: true }));
     try {
-      const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}`, { cache: "no-store" });
+      const headers: Record<string, string> = {};
+      if (session?.user?.id) {
+        headers["x-user-id"] = session.user.id;
+      }
+      const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}`, {
+        cache: "no-store",
+        headers
+      });
       const body = await parseApiResponse<DataRecord[]>(response);
       if (!body.success) {
         throw new Error(body.error?.message ?? `Unable to load ${tableName}.`);
@@ -131,7 +147,7 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     } finally {
       setLoadingTables((previous) => ({ ...previous, [tableName]: false }));
     }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     dataSources.forEach((source) => {
@@ -140,9 +156,13 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
   }, [dataSources, loadTable]);
 
   const createRecord = useCallback(async (tableName: string, payload: DataRecord): Promise<void> => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (session?.user?.id) {
+      headers["x-user-id"] = session.user.id;
+    }
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload)
     });
     const body = await parseApiResponse<DataRecord>(response);
@@ -151,12 +171,16 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
       throw new Error(`${body.error?.message ?? "Unable to create record."} ${details}`.trim());
     }
     await loadTable(tableName);
-  }, [loadTable]);
+  }, [loadTable, session]);
 
   const updateRecord = useCallback(async (tableName: string, id: string, payload: DataRecord): Promise<void> => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (session?.user?.id) {
+      headers["x-user-id"] = session.user.id;
+    }
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload)
     });
     const body = await parseApiResponse<DataRecord>(response);
@@ -165,23 +189,28 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
       throw new Error(`${body.error?.message ?? "Unable to update record."} ${details}`.trim());
     }
     await loadTable(tableName);
-  }, [loadTable]);
+  }, [loadTable, session]);
 
   const deleteRecord = useCallback(async (tableName: string, id: string): Promise<void> => {
+    const headers: Record<string, string> = {};
+    if (session?.user?.id) {
+      headers["x-user-id"] = session.user.id;
+    }
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, {
-      method: "DELETE"
+      method: "DELETE",
+      headers
     });
     const body = await parseApiResponse<{ id: string }>(response);
     if (!body.success) {
       throw new Error(body.error?.message ?? "Unable to delete record.");
     }
     await loadTable(tableName);
-  }, [loadTable]);
+  }, [loadTable, session]);
 
-  if (isLoadingConfig) {
+   if (isLoadingConfig) {
     return (
       <div className="space-y-4">
-        <div className="h-8 w-64 animate-pulse rounded bg-white/10" />
+        <div className="h-8 w-64 animate-pulse rounded bg-white/5" />
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="h-48 animate-pulse rounded-lg border border-line bg-panel" />
           <div className="h-48 animate-pulse rounded-lg border border-line bg-panel" />
@@ -192,13 +221,13 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
 
   if (!config && !hasActiveRuntime) {
     return (
-      <section className="rounded-lg border border-indigo-400/30 bg-indigo-400/10 p-8 text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-300">No Active Runtime</p>
-        <h1 className="mt-3 text-2xl font-semibold text-white">Generate your first app</h1>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-400">
+      <section className="rounded-lg border border-line/45 bg-panel p-8 text-center shadow-sm">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500 font-semibold">No Active Runtime</p>
+        <h1 className="mt-3 text-xl font-bold text-white">Generate your first app</h1>
+        <p className="mx-auto mt-2 max-w-xl text-xs leading-relaxed text-zinc-400">
           This workspace starts empty so GenStack feels like an AI platform, not a preloaded demo app. Create a runtime in AI Studio, then its pages will appear here.
         </p>
-        <Link className="mt-5 inline-flex rounded-md bg-indigo-electric px-4 py-2 text-sm font-medium text-white" href={`/${locale}/ai`}>
+        <Link className="mt-5 inline-flex rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition duration-150 shadow-none" href={`/${locale}/ai`}>
           Open AI Studio
         </Link>
       </section>
@@ -207,47 +236,47 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
 
   if (!config) {
     return (
-      <section className="rounded-lg border border-red-500/40 bg-red-500/10 p-8">
-        <h1 className="text-2xl font-semibold text-red-100">Runtime config unavailable</h1>
-        <p className="mt-2 text-sm text-red-100">{runtimeError ?? "Start the API server and refresh this page."}</p>
+      <section className="rounded-lg border border-danger/25 bg-danger/5 p-8">
+        <h1 className="text-xl font-bold text-danger">Runtime config unavailable</h1>
+        <p className="mt-2 text-xs text-danger/80 leading-relaxed font-mono">{runtimeError ?? "Start the API server and refresh this page."}</p>
       </section>
     );
   }
 
   if (!page) {
     return (
-      <section className="rounded-lg border border-line bg-panel/80 p-8 text-center">
-        <h1 className="text-2xl font-semibold text-white">No pages configured</h1>
-        <p className="mt-2 text-sm text-zinc-400">No config.ui.pages entry matches route "{route}".</p>
+      <section className="rounded-lg border border-line/45 bg-panel/85 p-8 text-center">
+        <h1 className="text-xl font-bold text-white">No pages configured</h1>
+        <p className="mt-2 text-xs text-zinc-400 leading-relaxed">No config.ui.pages entry matches route "{route}".</p>
       </section>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-electric">Config-rendered page</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">{page.name}</h1>
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">Config-rendered page</p>
+          <h1 className="mt-1.5 text-2xl font-bold text-zinc-100">{page.name}</h1>
         </div>
         <button
-          className="inline-flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-elevated/20 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-elevated/50 hover:text-zinc-100 transition duration-150"
           onClick={() => dataSources.forEach((source) => void loadTable(source))}
           type="button"
         >
-          <RefreshCw className="h-4 w-4" />
+          <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
           Refresh
         </button>
       </div>
 
       {runtimeError ? (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">{runtimeError}</div>
+        <div className="rounded-lg border border-danger/25 bg-danger/5 p-4 text-xs text-danger">{runtimeError}</div>
       ) : null}
 
       {page.components.length === 0 ? (
-        <div className="rounded-lg border border-line bg-panel p-8 text-center text-zinc-400">{t("empty_state")}</div>
+        <div className="rounded-lg border border-line/45 bg-panel p-8 text-center text-zinc-500 text-xs">{t("empty_state")}</div>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-2">
           {page.components.map((component, index) => {
             const Renderer = getComponentRenderer(component.type);
             const source = componentSource(component);

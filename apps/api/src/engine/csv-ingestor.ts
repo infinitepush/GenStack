@@ -106,37 +106,50 @@ function coerceValue(field: FieldConfig, value: string | undefined): { value?: u
   const trimmed = value?.trim() ?? "";
   if (trimmed.length === 0) {
     if (field.required) {
-      return { error: `${field.name} is required.` };
+      return { error: `CSV missing required field: ${field.name}` };
     }
     return {};
   }
 
   if (field.type === "number") {
-    const numberValue = Number(trimmed);
+    // Strip currency symbols, commas, percent signs, and spaces
+    const cleaned = trimmed.replace(/[$,€,£,%, ]/g, "").replace(/,/g, "");
+    const numberValue = Number(cleaned);
     if (Number.isNaN(numberValue)) {
-      return { error: `${field.name} must be a number.` };
+      return { error: `${field.name} must be a number (got "${trimmed}").` };
     }
     return { value: numberValue };
   }
 
   if (field.type === "boolean") {
-    if (["true", "1", "yes"].includes(trimmed.toLowerCase())) return { value: true };
-    if (["false", "0", "no"].includes(trimmed.toLowerCase())) return { value: false };
-    return { error: `${field.name} must be true or false.` };
+    const cleanLower = trimmed.toLowerCase().trim();
+    if (["true", "1", "yes", "y", "on", "active", "t"].includes(cleanLower)) return { value: true };
+    if (["false", "0", "no", "n", "off", "inactive", "f"].includes(cleanLower)) return { value: false };
+    return { error: `${field.name} must be a boolean (got "${trimmed}").` };
   }
 
   if (field.type === "date") {
+    // Check if it's a numeric timestamp
+    if (/^\d+$/.test(trimmed)) {
+      const ms = Number(trimmed);
+      const date = new Date(ms);
+      if (!Number.isNaN(date.getTime())) {
+        return { value: date.toISOString() };
+      }
+    }
     const date = new Date(trimmed);
     if (Number.isNaN(date.getTime())) {
-      return { error: `${field.name} must be a valid date.` };
+      return { error: `${field.name} must be a valid date (got "${trimmed}").` };
     }
     return { value: date.toISOString() };
   }
 
   if (field.type === "enum" && field.options && field.options.length > 0) {
-    if (!field.options.includes(trimmed)) {
-      return { error: `${field.name} must be one of: ${field.options.join(", ")}.` };
+    const match = field.options.find(opt => opt.toLowerCase().trim() === trimmed.toLowerCase().trim());
+    if (match) {
+      return { value: match };
     }
+    return { error: `${field.name} must be one of: ${field.options.join(", ")} (got "${trimmed}").` };
   }
 
   return { value: trimmed };

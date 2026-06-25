@@ -58,73 +58,73 @@ const ChartRenderer = ({ config, data = [], sourceName }: ComponentRendererProps
 
   if (chartData.length === 0) {
     return (
-      <div className="rounded-xl border border-line bg-panel p-8 text-center">
-        <p className="text-lg font-medium text-zinc-100">No chart data yet</p>
-        <p className="mt-2 text-sm text-zinc-500">
+      <div className="rounded-xl border border-line bg-panel p-8 text-center shadow-sm">
+        <p className="text-sm font-semibold text-zinc-200">No chart data yet</p>
+        <p className="mt-2 text-xs text-zinc-400 leading-relaxed max-w-md mx-auto">
           {t("empty_state")}. Add {sourceName ? humanizeTableName(sourceName).toLowerCase() : "records"} to populate this chart.
         </p>
-        <p className="mt-3 text-xs uppercase tracking-[0.16em] text-zinc-600">Responsive chart · legend · cleaner labels</p>
+        <p className="mt-3.5 text-[10px] uppercase tracking-wider text-zinc-600 font-mono">Responsive chart · legend · cleaner labels</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-line bg-panel p-5">
+    <div className="rounded-lg border border-line/45 bg-panel p-6 shadow-sm">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-zinc-100">
+          <p className="text-xs font-semibold text-zinc-200">
             {metricLabel} by {humanizeIdentifier(groupBy)}
           </p>
-          <p className="mt-1 text-xs text-zinc-500">{chartData.length} group(s)</p>
+          <p className="mt-0.5 text-[10px] text-zinc-500 font-mono">{chartData.length} group(s)</p>
         </div>
-        <div className="flex flex-wrap gap-2 text-[11px] text-zinc-500">
-          <span className="rounded-full border border-line bg-black/25 px-2.5 py-1">Legend enabled</span>
-          <span className="rounded-full border border-line bg-black/25 px-2.5 py-1">Responsive</span>
-          <span className="rounded-full border border-line bg-black/25 px-2.5 py-1">Runtime-safe</span>
+        <div className="flex flex-wrap gap-1.5 text-[10px] text-zinc-500 font-mono">
+          <span className="rounded-full border border-line/55 bg-elevated/20 px-2 py-0.5 text-zinc-400">Legend enabled</span>
+          <span className="rounded-full border border-line/55 bg-elevated/20 px-2 py-0.5 text-zinc-400">Responsive</span>
+          <span className="rounded-full border border-line/55 bg-elevated/20 px-2 py-0.5 text-zinc-400">Runtime-safe</span>
         </div>
       </div>
-      <div className="h-80 min-w-0 overflow-hidden rounded-xl border border-white/5 bg-black/20 p-3">
+      <div className="h-80 min-w-0 overflow-hidden rounded-md border border-line/45 bg-elevated/5 p-3">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 16, right: 16, bottom: 12, left: 0 }}>
             <defs>
               <linearGradient id="chartBarGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#818cf8" stopOpacity={0.98} />
-                <stop offset="100%" stopColor="#6366f1" stopOpacity={0.72} />
+                <stop offset="0%" stopColor="#5E6AD2" stopOpacity={0.9} />
+                <stop offset="100%" stopColor="#3E4AA2" stopOpacity={0.6} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="#27272a" strokeDasharray="3 3" vertical={false} />
+            <CartesianGrid stroke="rgba(255, 255, 255, 0.04)" strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="category"
-              stroke="#a1a1aa"
-              tick={{ fill: "#a1a1aa", fontSize: 12 }}
+              stroke="#737373"
+              tick={{ fill: "#737373", fontSize: 10, fontFamily: "monospace" }}
               tickLine={false}
-              axisLine={{ stroke: "#3f3f46" }}
+              axisLine={{ stroke: "rgba(255, 255, 255, 0.04)" }}
               interval="preserveStartEnd"
               minTickGap={18}
             />
             <YAxis
-              stroke="#a1a1aa"
-              tick={{ fill: "#a1a1aa", fontSize: 12 }}
+              stroke="#737373"
+              tick={{ fill: "#737373", fontSize: 10, fontFamily: "monospace" }}
               tickLine={false}
               axisLine={false}
               width={40}
             />
             <Tooltip
-              cursor={{ fill: "rgba(99, 102, 241, 0.08)" }}
+              cursor={{ fill: "rgba(94, 106, 210, 0.04)" }}
               formatter={(value) => [Number(value).toLocaleString(), metricLabel]}
               labelFormatter={(label) => `${humanizeIdentifier(String(label))}`}
-              contentStyle={{ backgroundColor: "#111113", border: "1px solid #27272a", borderRadius: 10, color: "#f4f4f5" }}
-              itemStyle={{ color: "#c7d2fe" }}
-              labelStyle={{ color: "#f4f4f5" }}
+              contentStyle={{ backgroundColor: "#181818", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: 6, color: "#f5f5f5" }}
+              itemStyle={{ color: "#5E6AD2", fontSize: 11 }}
+              labelStyle={{ color: "#f5f5f5", fontSize: 11 }}
             />
             <Legend
               verticalAlign="top"
               align="right"
               iconType="circle"
-              wrapperStyle={{ paddingBottom: 8, color: "#d4d4d8", fontSize: 12 }}
+              wrapperStyle={{ paddingBottom: 8, color: "#a3a3a3", fontSize: 10 }}
               formatter={() => metricLabel}
             />
-            <Bar dataKey="metric" fill="url(#chartBarGradient)" name={metricLabel} radius={[10, 10, 0, 0]} />
+            <Bar dataKey="metric" fill="url(#chartBarGradient)" name={metricLabel} radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

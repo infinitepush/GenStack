@@ -206,6 +206,22 @@ export class ConfigEngine {
       errors
     );
 
+    if (app.theme !== "dark") {
+      warnings.push({
+        level: "warning",
+        path: "app.theme",
+        message: `Theme is set to "${app.theme}". Non-dark themes are coming soon; current runtime uses Editorial Dark.`
+      });
+    }
+
+    if (!appInput.name || String(appInput.name).trim() === "") {
+      errors.push({
+        level: "error",
+        path: "app.name",
+        message: "Application name is required and cannot be empty."
+      });
+    }
+
     const auth = parseWithDefault(
       appConfigSchema.shape.auth,
       root.auth ?? {},
@@ -216,15 +232,45 @@ export class ConfigEngine {
 
     const databaseInput = readObject(root.database, "database", errors);
     const rawTables = readArray(databaseInput.tables, "database.tables", errors);
+    const tableNames = new Set<string>();
     const tables = rawTables
       .map((table, index) => parseWithDefault(databaseTableSchema, table, undefined, `database.tables.${index}`, errors))
       .filter((table): table is DatabaseTableConfig => table !== undefined)
-      .map((table, tableIndex) => ({
-        ...table,
-        fields: table.fields.map((field, fieldIndex) =>
-          normalizeField(field, `database.tables.${tableIndex}.fields.${fieldIndex}`, warnings)
-        )
-      }));
+      .map((table, tableIndex) => {
+        if (tableNames.has(table.name)) {
+          errors.push({
+            level: "error",
+            path: `database.tables.${tableIndex}.name`,
+            message: `Duplicate database table name "${table.name}" found.`
+          });
+        }
+        tableNames.add(table.name);
+
+        const fieldNames = new Set<string>();
+        const mappedFields = table.fields.map((field, fieldIndex) => {
+          if (fieldNames.has(field.name)) {
+            errors.push({
+              level: "error",
+              path: `database.tables.${tableIndex}.fields.${fieldIndex}.name`,
+              message: `Duplicate field name "${field.name}" found in table "${table.name}".`
+            });
+          }
+          fieldNames.add(field.name);
+
+          const allowedTypes = ["string", "text", "number", "boolean", "date", "enum"];
+          if (!allowedTypes.includes(field.type)) {
+            errors.push({
+              level: "error",
+              path: `database.tables.${tableIndex}.fields.${fieldIndex}.type`,
+              message: `Unknown field type "${field.type}" found in table "${table.name}".`
+            });
+          }
+
+          return normalizeField(field, `database.tables.${tableIndex}.fields.${fieldIndex}`, warnings);
+        });
+
+        return { ...table, fields: mappedFields };
+      });
 
     const uiInput = readObject(root.ui, "ui", errors);
     if (root.ui === undefined) {

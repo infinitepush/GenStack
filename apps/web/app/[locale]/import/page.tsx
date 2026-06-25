@@ -1,11 +1,12 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, FileUp, RefreshCw, Table2 } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
+import { AlertTriangle, CheckCircle2, FileUp, RefreshCw, Table2, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { appConfig } from "@/lib/app-config";
+import type { AppConfig } from "@genstack/config-types";
 
 interface UploadResult {
   uploadId: string;
@@ -49,42 +50,78 @@ function normalize(value: string): string {
 }
 
 function suggestField(header: string, fields: string[]): string {
-  const normalized = normalize(header);
+  const normalizedHeader = normalize(header);
+  
+  // Exact match after normalization
+  const exactMatch = fields.find(field => normalize(field) === normalizedHeader);
+  if (exactMatch) return exactMatch;
+
+  // Synonyms/Fuzzy heuristics
   const synonyms: Record<string, string> = {
     amt: "amount",
     total: "amount",
     expensetitle: "title",
     name: "title",
-    day: "date"
+    day: "date",
+    id: "id",
+    desc: "description"
   };
-  const synonym = synonyms[normalized];
+  const synonym = synonyms[normalizedHeader];
   if (synonym && fields.includes(synonym)) return synonym;
-  return fields.find((field) => normalize(field) === normalized || normalized.includes(normalize(field))) ?? "ignore";
-}
 
-async function readApi<T>(response: Response): Promise<T> {
-  const payload = (await response.json()) as ApiResponse<T>;
-  if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message ?? "Request failed.");
-  }
-  return payload.data;
+  // Partial match after normalization
+  const partialMatch = fields.find(field => {
+    const normField = normalize(field);
+    return normalizedHeader.includes(normField) || normField.includes(normalizedHeader);
+  });
+  if (partialMatch) return partialMatch;
+
+  return "ignore";
 }
 
 export default function ImportPage(): JSX.Element {
   const t = useTranslations();
+  const { data: session } = useSession();
+  const [activeConfig, setActiveConfig] = useState<AppConfig | null>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isBusy, setIsBusy] = useState(false);
   const [upload, setUpload] = useState<UploadResult | null>(null);
-  const [tableName, setTableName] = useState(appConfig.database.tables[0]?.name ?? "");
+  const [tableName, setTableName] = useState("");
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [result, setResult] = useState<IngestResult | null>(null);
 
-  const table = appConfig.database.tables.find((candidate) => candidate.name === tableName);
+  // Load the active config from backend on mount
+  useEffect(() => {
+    async function loadConfig() {
+      try {
+        const res = await fetch(`${apiBase()}/config`, { cache: "no-store" });
+        const body = await res.json();
+        if (body.success && body.data?.config) {
+          const config = body.data.config as AppConfig;
+          setActiveConfig(config);
+          const firstTable = config.database.tables[0];
+          if (firstTable) {
+            setTableName(firstTable.name);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load active schema config:", err);
+        toast.error("Failed to fetch database schema.");
+      }
+    }
+    void loadConfig();
+  }, []);
+
+  const table = useMemo(() => {
+    return activeConfig?.database.tables.find((candidate) => candidate.name === tableName);
+  }, [activeConfig, tableName]);
+
   const fieldNames = useMemo(() => table?.fields.map((field) => field.name) ?? [], [table]);
 
   const applySuggestedMappings = (nextUpload: UploadResult, nextTableName = tableName): void => {
-    const nextTable = appConfig.database.tables.find((candidate) => candidate.name === nextTableName);
+    if (!activeConfig) return;
+    const nextTable = activeConfig.database.tables.find((candidate) => candidate.name === nextTableName);
     const fields = nextTable?.fields.map((field) => field.name) ?? [];
     setMappings(Object.fromEntries(nextUpload.headers.map((header) => [header, suggestField(header, fields)])));
   };
@@ -103,9 +140,12 @@ export default function ImportPage(): JSX.Element {
     try {
       const body = new FormData();
       body.append("file", file);
-      const nextUpload = await readApi<UploadResult>(
-        await fetch(`${apiBase()}/import/upload`, { method: "POST", body })
-      );
+      const response = await fetch(`${apiBase()}/import/upload`, { method: "POST", body });
+      const payload = (await response.json()) as ApiResponse<UploadResult>;
+      if (!response.ok || !payload.success || !payload.data) {
+        throw new Error(payload.error?.message ?? "Request failed.");
+      }
+      const nextUpload = payload.data;
       setUpload(nextUpload);
       applySuggestedMappings(nextUpload);
       setStep(2);
@@ -127,13 +167,16 @@ export default function ImportPage(): JSX.Element {
     if (!upload) return;
     setIsBusy(true);
     try {
-      const nextPreview = await readApi<PreviewResult>(
-        await fetch(`${apiBase()}/import/map`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uploadId: upload.uploadId, tableName, mappings })
-        })
-      );
+      const response = await fetch(`${apiBase()}/import/map`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadId: upload.uploadId, tableName, mappings })
+      });
+      const payload = (await response.json()) as ApiResponse<PreviewResult>;
+      if (!response.ok || !payload.success || !payload.data) {
+        throw new Error(payload.error?.message ?? "Request failed.");
+      }
+      const nextPreview = payload.data;
       setPreview(nextPreview);
       toast.success(`${nextPreview.valid} rows are valid`);
     } catch (error: unknown) {
@@ -147,16 +190,39 @@ export default function ImportPage(): JSX.Element {
     if (!upload) return;
     setIsBusy(true);
     try {
-      const nextResult = await readApi<IngestResult>(
-        await fetch(`${apiBase()}/import/ingest`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uploadId: upload.uploadId, tableName, mappings })
-        })
-      );
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.user?.id) {
+        headers["x-user-id"] = session.user.id;
+      }
+      const response = await fetch(`${apiBase()}/import/ingest`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ uploadId: upload.uploadId, tableName, mappings })
+      });
+      const payload = (await response.json()) as ApiResponse<IngestResult>;
+      if (!response.ok || !payload.success || !payload.data) {
+        throw new Error(payload.error?.message ?? "Request failed.");
+      }
+      const nextResult = payload.data;
       setResult(nextResult);
       setStep(3);
-      toast.success(`${nextResult.inserted} rows imported`);
+      if (nextResult.inserted > 0) {
+        toast.success(`${nextResult.inserted} rows imported`);
+      } else {
+        toast.error("No rows were imported. Check validation warnings.");
+      }
+
+      // Log timeline activity
+      if (nextResult.inserted > 0) {
+        await fetch(`${apiBase()}/runtime/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "CSV_IMPORTED",
+            message: `Imported CSV data: ${nextResult.inserted} rows ingested successfully into table "${tableName}".`
+          })
+        }).catch(err => console.error("Failed to log activity:", err));
+      }
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Import failed");
     } finally {
@@ -172,33 +238,44 @@ export default function ImportPage(): JSX.Element {
     setMappings({});
   };
 
+  if (!activeConfig) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+        <p className="text-xs text-zinc-400 font-mono">Loading active database schema...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-[1600px] mx-auto pb-12">
       <div>
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-indigo-electric">Phase 3</p>
-        <h1 className="mt-3 text-3xl font-semibold">{t("nav_import")}</h1>
-        <p className="mt-2 text-sm text-zinc-400">Upload, map, validate, and ingest CSV rows against the active AppConfig.</p>
+        <span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider text-accent uppercase">
+          Phase 3 Ingestion
+        </span>
+        <h1 className="mt-2 text-2xl font-bold text-zinc-100">{t("nav_import")}</h1>
+        <p className="mt-1 text-xs text-zinc-400 leading-relaxed">Upload, map, validate, and ingest CSV rows against the active AppConfig database tables.</p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        {["Upload", "Map Columns", "Result"].map((label, index) => (
-          <div key={label} className={`rounded-lg border p-4 ${step === index + 1 ? "border-indigo-electric bg-indigo-electric/10" : "border-line bg-panel"}`}>
-            <p className="text-sm font-medium">{label}</p>
-            <p className="text-xs text-zinc-500">Step {index + 1}</p>
+      <div className="grid gap-4 md:grid-cols-3">
+        {["Upload CSV File", "Map Column Fields", "Review Results"].map((label, index) => (
+          <div key={label} className={`rounded-lg border p-4 transition-colors duration-150 ${step === index + 1 ? "border-accent/40 bg-accent/5 text-zinc-100 font-semibold" : "border-line/45 bg-panel text-zinc-400"}`}>
+            <p className="text-xs">{label}</p>
+            <p className="text-[10px] text-zinc-500 font-mono mt-0.5">Step {index + 1}</p>
           </div>
         ))}
       </div>
 
       {step === 1 ? (
-        <section className="rounded-lg border border-line bg-panel p-6">
+        <section className="rounded-lg border border-line bg-panel p-6 md:p-8 shadow-sm">
           <label
             onDrop={onDrop}
             onDragOver={(event) => event.preventDefault()}
-            className="grid cursor-pointer place-items-center rounded-lg border border-dashed border-zinc-700 bg-black/30 p-12 text-center hover:border-indigo-electric"
+            className="grid cursor-pointer place-items-center rounded-lg border border-dashed border-line bg-elevated/5 p-12 text-center hover:border-accent/40 transition duration-150"
           >
-            <FileUp className="h-10 w-10 text-indigo-300" />
-            <p className="mt-4 text-lg font-medium">{t("upload_csv")}</p>
-            <p className="mt-2 text-sm text-zinc-500">Drop a .csv file here or click to browse. Max size 5MB.</p>
+            <FileUp className="h-10 w-10 text-zinc-500" />
+            <p className="mt-4 text-sm font-semibold text-zinc-200">{t("upload_csv")}</p>
+            <p className="mt-1.5 text-xs text-zinc-400">Drop a .csv file here or click to browse. Max size 5MB.</p>
             <input
               type="file"
               accept=".csv,text/csv"
@@ -209,54 +286,88 @@ export default function ImportPage(): JSX.Element {
               }}
             />
           </label>
-          {isBusy ? <p className="mt-4 text-sm text-zinc-400">{t("loading")}</p> : null}
+          {isBusy ? (
+            <div className="flex items-center gap-2 mt-4 text-xs text-zinc-400 font-mono">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Parsing CSV...
+            </div>
+          ) : null}
         </section>
       ) : null}
 
       {step === 2 && upload ? (
         <section className="grid gap-6 xl:grid-cols-[1fr_420px]">
-          <div className="rounded-lg border border-line bg-panel p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-lg border border-line bg-panel p-6 shadow-sm space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/40 pb-4">
               <div>
-                <h2 className="text-lg font-semibold">{upload.fileName}</h2>
-                <p className="text-sm text-zinc-500">{upload.rowCount} data rows</p>
+                <h2 className="text-sm font-semibold text-zinc-200">{upload.fileName}</h2>
+                <p className="text-[11px] text-zinc-500 font-mono mt-0.5">{upload.rowCount} data rows detected</p>
               </div>
-              <select
-                value={tableName}
-                onChange={(event) => {
-                  setTableName(event.target.value);
-                  applySuggestedMappings(upload, event.target.value);
-                }}
-                className="rounded-md border border-line bg-black/40 px-3 py-2 text-sm"
-              >
-                {appConfig.database.tables.map((item) => (
-                  <option key={item.name} value={item.name}>{item.name}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500 font-mono">Target Table:</span>
+                <select
+                  value={tableName}
+                  onChange={(event) => {
+                    setTableName(event.target.value);
+                    applySuggestedMappings(upload, event.target.value);
+                  }}
+                  className="rounded-md border border-line/50 bg-[#121212] px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-accent focus:ring-0 transition"
+                >
+                  {activeConfig.database.tables.map((item) => (
+                    <option key={item.name} value={item.name} className="bg-[#181818]">{item.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Required Fields Checklist Banner */}
+            <div className="rounded-lg border border-line bg-elevated/5 p-4 space-y-3">
+              <h3 className="text-xs font-semibold text-zinc-200">Required Fields Mapping Status</h3>
+              <p className="text-[11px] text-zinc-400">All required fields in the table must be mapped to a CSV column to successfully ingest.</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                {table?.fields.filter(f => f.required).map((field) => {
+                  const isMapped = Object.values(mappings).includes(field.name);
+                  return (
+                    <div key={field.name} className="flex items-center gap-2 text-xs">
+                      {isMapped ? (
+                        <span className="text-emerald-400">✔</span>
+                      ) : (
+                        <span className="text-rose-500">❌</span>
+                      )}
+                      <span className={isMapped ? "text-zinc-300 font-mono font-medium" : "text-zinc-400 font-mono line-through opacity-70"}>
+                        {field.name}
+                      </span>
+                    </div>
+                  );
+                })}
+                {table?.fields.filter(f => f.required).length === 0 && (
+                  <p className="text-[11px] text-zinc-500 italic col-span-full">No required fields in this table.</p>
+                )}
+              </div>
             </div>
 
             {upload.warnings.map((warning) => (
-              <div key={warning} className="mt-4 flex gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-100">
-                <AlertTriangle className="h-4 w-4" />
+              <div key={warning} className="mt-4 flex gap-2 rounded-md border border-warning/25 bg-warning/5 p-3 text-xs text-warning/95">
+                <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
                 {warning}
               </div>
             ))}
 
-            <div className="mt-6 space-y-3">
+            <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
               {upload.headers.map((header) => (
-                <div key={header} className="grid gap-3 rounded-lg border border-line bg-black/20 p-3 md:grid-cols-[1fr_1fr]">
+                <div key={header} className="grid gap-3 rounded-md border border-line/50 bg-elevated/10 p-3.5 md:grid-cols-[1fr_1fr] items-center">
                   <div>
-                    <p className="text-sm font-medium">{header}</p>
-                    <p className="text-xs text-zinc-500">CSV column</p>
+                    <p className="text-xs font-semibold text-zinc-200">{header}</p>
+                    <p className="text-[10px] text-zinc-500 font-mono mt-0.5">CSV column</p>
                   </div>
                   <select
                     value={mappings[header] ?? "ignore"}
                     onChange={(event) => setMappings((previous) => ({ ...previous, [header]: event.target.value }))}
-                    className="rounded-md border border-line bg-black/40 px-3 py-2 text-sm"
+                    className="rounded-md border border-line/50 bg-[#121212] px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-accent focus:ring-0 transition"
                   >
-                    <option value="ignore">Ignore</option>
+                    <option value="ignore" className="bg-[#181818]">Ignore</option>
                     {table?.fields.map((field) => (
-                      <option key={field.name} value={field.name}>
+                      <option key={field.name} value={field.name} className="bg-[#181818]">
                         {field.name} ({field.type})
                       </option>
                     ))}
@@ -265,33 +376,54 @@ export default function ImportPage(): JSX.Element {
               ))}
             </div>
 
-            <div className="mt-6 flex gap-3">
-              <button onClick={() => void validateMapping()} disabled={isBusy} className="rounded-md border border-line bg-black/30 px-4 py-2 text-sm">
-                Validate preview
+            <div className="flex gap-3 pt-4 border-t border-line/30">
+              <button 
+                onClick={() => void validateMapping()} 
+                disabled={isBusy} 
+                className="rounded-md border border-line bg-elevated/20 px-4 py-2 text-xs font-semibold text-zinc-300 hover:bg-elevated/45 hover:text-zinc-100 transition duration-150"
+              >
+                {isBusy ? "Validating..." : "Validate schema mappings"}
               </button>
-              <button onClick={() => void ingest()} disabled={isBusy || !preview} className="rounded-md bg-indigo-electric px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
-                {t("btn_import")}
+              <button 
+                onClick={() => void ingest()} 
+                disabled={isBusy || !preview} 
+                className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 shadow-none"
+              >
+                {isBusy ? "Importing..." : t("btn_import")}
               </button>
             </div>
           </div>
 
-          <aside className="rounded-lg border border-line bg-panel p-4">
-            <h2 className="flex items-center gap-2 text-sm font-medium">
-              <Table2 className="h-4 w-4" />
-              Preview
+          <aside className="rounded-lg border border-line bg-panel p-5 shadow-sm space-y-4">
+            <h2 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
+              <Table2 className="h-3.5 w-3.5 text-zinc-500" />
+              Ingestion Preview
             </h2>
-            <pre className="mt-4 max-h-72 overflow-auto rounded-md bg-black/50 p-3 font-mono text-xs text-zinc-300">
+            <pre className="max-h-72 overflow-auto rounded-md bg-elevated/5 p-4 font-mono text-[11px] text-zinc-400 border border-line/40">
               {JSON.stringify(preview?.preview ?? upload.preview.slice(0, 3), null, 2)}
             </pre>
             {preview ? (
-              <div className="mt-4 space-y-2 text-sm">
-                <p className="text-emerald-300">{preview.valid} valid rows</p>
-                <p className="text-yellow-300">{preview.skipped} skipped rows</p>
-                {preview.errors.slice(0, 5).map((error) => (
-                  <p key={`${error.row}-${error.reason}`} className="text-xs text-red-300">
-                    Row {error.row}: {error.reason}
-                  </p>
-                ))}
+              <div className="space-y-3 pt-3 border-t border-line/30 text-xs font-mono">
+                <div className="flex justify-between py-1 border-b border-line/20">
+                  <span className="text-zinc-500">Valid Rows</span>
+                  <span className="text-emerald-400 font-semibold">{preview.valid}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-line/20">
+                  <span className="text-zinc-500">Skipped/Degraded Rows</span>
+                  <span className="text-warning font-semibold">{preview.skipped}</span>
+                </div>
+                {preview.errors.length > 0 && (
+                  <div className="space-y-1.5 pt-2">
+                    <p className="text-[10px] uppercase font-bold text-zinc-500">Validation Warnings</p>
+                    <div className="space-y-1 max-h-40 overflow-y-auto text-[10px] text-rose-400 bg-rose-500/5 rounded p-2.5 border border-rose-500/10">
+                      {preview.errors.slice(0, 8).map((error, idx) => (
+                        <p key={idx}>
+                          Row {error.row}: {error.reason}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </aside>
@@ -299,30 +431,55 @@ export default function ImportPage(): JSX.Element {
       ) : null}
 
       {step === 3 && result ? (
-        <section className="rounded-lg border border-line bg-panel p-6">
-          <div className="flex items-center gap-3 text-emerald-300">
-            <CheckCircle2 className="h-6 w-6" />
-            <h2 className="text-xl font-semibold">{result.inserted} rows imported successfully</h2>
+        <section className="rounded-lg border border-line bg-panel p-6 md:p-8 shadow-sm max-w-2xl">
+          <div className="flex items-center gap-3 text-zinc-300">
+            {result.inserted > 0 ? (
+              <>
+                <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-400" />
+                <h2 className="text-lg font-bold text-zinc-100">CSV Data Imported Successfully</h2>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="h-6 w-6 shrink-0 text-warning" />
+                <h2 className="text-lg font-bold text-zinc-100">No Data Imported</h2>
+              </>
+            )}
           </div>
-          <p className="mt-3 text-sm text-zinc-400">{result.skipped} rows skipped</p>
+          
+          <div className="mt-6 border border-line rounded-lg bg-elevated/5 p-4 space-y-3 text-xs font-mono">
+            <div className="flex justify-between py-1.5 border-b border-line/30">
+              <span className="text-zinc-500">Rows Detected</span>
+              <span className="text-zinc-200">{upload?.rowCount ?? 0}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-line/30">
+              <span className="text-zinc-500">Rows Imported</span>
+              <span className="text-emerald-400 font-bold">{result.inserted}</span>
+            </div>
+            <div className="flex justify-between py-1.5 last:border-0">
+              <span className="text-zinc-500">Rows Skipped</span>
+              <span className="text-warning">{result.skipped}</span>
+            </div>
+          </div>
+
           {result.errors.length > 0 ? (
-            <details className="mt-4 rounded-lg border border-line bg-black/20 p-4">
-              <summary className="cursor-pointer text-sm text-zinc-200">View error list</summary>
-              <div className="mt-3 max-h-72 overflow-auto space-y-2">
-                {result.errors.map((error) => (
-                  <p key={`${error.row}-${error.reason}`} className="text-sm text-red-300">
+            <details className="mt-4 rounded-md border border-line/40 bg-elevated/5 p-4">
+              <summary className="cursor-pointer text-xs font-semibold text-zinc-200 font-mono">View Ingestion Errors ({result.errors.length})</summary>
+              <div className="mt-3 max-h-72 overflow-auto space-y-1.5">
+                {result.errors.map((error, idx) => (
+                  <p key={idx} className="text-xs text-danger leading-relaxed font-mono">
                     Row {error.row}: {error.reason}
                   </p>
                 ))}
               </div>
             </details>
           ) : null}
+
           <div className="mt-6 flex flex-wrap gap-3">
-            <button onClick={reset} className="inline-flex items-center gap-2 rounded-md border border-line bg-black/30 px-4 py-2 text-sm">
-              <RefreshCw className="h-4 w-4" />
+            <button onClick={reset} className="inline-flex items-center gap-1.5 rounded-md border border-line bg-elevated/20 px-4 py-2 text-xs font-semibold text-zinc-300 hover:bg-elevated/45 hover:text-zinc-100 transition duration-150">
+              <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
               Import another file
             </button>
-            <Link href={`/${appConfig.app.locale}/dashboard`} className="rounded-md bg-indigo-electric px-4 py-2 text-sm font-medium text-white">
+            <Link href={`/${activeConfig.app.locale}/dashboard`} className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent-hover transition shadow-none">
               View in Dashboard
             </Link>
           </div>
