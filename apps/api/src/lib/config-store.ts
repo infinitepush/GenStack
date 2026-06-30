@@ -266,3 +266,28 @@ export async function initializeConfigStore(): Promise<void> {
     logger.error({ error }, "Failed to initialize config from database; using demo fallback");
   }
 }
+
+export async function getUserData(userId: string, keySuffix: string): Promise<any> {
+  const key = `user:${userId}:${keySuffix}`;
+  try {
+    const record = await prisma.appState.findUnique({ where: { key } });
+    return record?.value ?? null;
+  } catch (error: unknown) {
+    logger.error({ error, userId, keySuffix }, "Failed to load user data");
+    return null;
+  }
+}
+
+export async function saveUserData(userId: string, keySuffix: string, value: any): Promise<void> {
+  const key = `user:${userId}:${keySuffix}`;
+  try {
+    await prisma.appState.upsert({
+      where: { key },
+      update: { value: value as any },
+      create: { key, value: value as any }
+    });
+  } catch (error: unknown) {
+    logger.error({ error, userId, keySuffix }, "Failed to save user data");
+  }
+}
+

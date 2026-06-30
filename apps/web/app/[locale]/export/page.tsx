@@ -4,6 +4,7 @@ import { Archive, CheckCircle2, Download, Github, Loader2, XCircle, Info, Extern
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 import { appConfig } from "@/lib/app-config";
 import type { AppConfig } from "@genstack/config-types";
 import { getActiveRuntime } from "@/lib/runtime-history";
@@ -53,6 +54,8 @@ async function readApi<T>(response: Response): Promise<T> {
 
 export default function ExportPage(): JSX.Element {
   const t = useTranslations();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
   const [activeConfig, setActiveConfig] = useState<AppConfig>(appConfig);
   const [repoName, setRepoName] = useState("");
   const [token, setToken] = useState("");
@@ -74,11 +77,11 @@ export default function ExportPage(): JSX.Element {
 
   // Dynamically resolve configuration on mount
   useEffect(() => {
-    const runtime = getActiveRuntime();
+    const runtime = getActiveRuntime(userId);
     const configToUse = runtime?.config ?? appConfig;
     setActiveConfig(configToUse);
     setRepoName(slugify(configToUse.app.name));
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (!job || job.status === "completed" || job.status === "failed") return;

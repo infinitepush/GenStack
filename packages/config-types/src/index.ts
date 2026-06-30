@@ -52,7 +52,8 @@ export const appConfigSchema = z.object({
   }),
   api: z.object({
     endpoints: z.array(apiEndpointSchema).default([])
-  })
+  }),
+  translations: z.record(z.string(), z.record(z.string(), z.string())).optional()
 });
 
 export type FieldType = z.infer<typeof fieldTypeSchema>;
@@ -307,7 +308,8 @@ export class ConfigEngine {
       auth: authEnabled ? { enabled: true, methods: authMethods } : { enabled: false, methods: [] },
       database: { tables },
       ui: { pages: normalizePages(parsedPages, warnings) },
-      api: { endpoints }
+      api: { endpoints },
+      translations: root.translations as any
     };
 
     const finalParse = appConfigSchema.safeParse(normalizedConfig);

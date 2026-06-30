@@ -24,6 +24,7 @@ import { createImportRouter } from "./routes/import-router.js";
 import { createExportRouter } from "./routes/export-router.js";
 import { createDynamicRouter } from "./routes/dynamic-router.js";
 import { createIntegrationsRouter } from "./routes/integrations-router.js";
+import { createUserDataRouter } from "./routes/user-data-router.js";
 import { authMiddleware } from "./lib/auth-middleware.js";
 
 interface ApiResponse<T> {
@@ -212,6 +213,7 @@ app.use("/import", createImportRouter());
 app.use("/export", createExportRouter());
 app.use("/runtime", createDynamicRouter());
 app.use("/integrations", createIntegrationsRouter());
+app.use("/user-data", createUserDataRouter());
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   const message = error instanceof Error ? error.message : "Unexpected server error.";

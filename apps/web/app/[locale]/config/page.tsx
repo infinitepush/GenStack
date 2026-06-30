@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 import type { AppConfig, ConfigIssue } from "@genstack/config-types";
 import { appConfig } from "@/lib/app-config";
 import { buildConfigDownloadName, downloadJson } from "@/lib/download-json";
@@ -43,6 +44,8 @@ export default function ConfigPage(): JSX.Element {
   const t = useTranslations();
   const router = useRouter();
   const params = useParams<{ locale: string }>();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
   const locale = params.locale ?? "en";
   const [json, setJson] = useState(JSON.stringify(appConfig, null, 2));
   const [result, setResult] = useState<ConfigEngineResult | null>(null);
@@ -80,7 +83,7 @@ export default function ConfigPage(): JSX.Element {
         return;
       }
 
-      const currentRuntime = getActiveRuntime();
+      const currentRuntime = getActiveRuntime(userId);
       const parsedAppName = parsed?.app?.name ?? "this config";
       if (currentRuntime && currentRuntime.appName !== parsedAppName) {
         const shouldReplace = window.confirm(
@@ -109,7 +112,7 @@ export default function ConfigPage(): JSX.Element {
       if (match) {
         setResult(verified);
         setJson(JSON.stringify(verified.config, null, 2));
-        saveRuntimeConfig(verified.config, "Applied from Config Editor");
+        saveRuntimeConfig(verified.config, userId, "Applied from Config Editor");
         window.dispatchEvent(new CustomEvent("genstack:config-applied"));
         
         setLastSaved(new Date().toISOString());
@@ -149,7 +152,7 @@ export default function ConfigPage(): JSX.Element {
     void loadCurrentConfig();
     void fetchHistory();
 
-    const active = getActiveRuntime();
+    const active = getActiveRuntime(userId);
     if (active) {
       setLastSaved(active.createdAt);
     }
@@ -157,7 +160,7 @@ export default function ConfigPage(): JSX.Element {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [userId]);
 
   const reset = async (): Promise<void> => {
     setIsSaving(true);
@@ -167,7 +170,7 @@ export default function ConfigPage(): JSX.Element {
       );
       setResult(next);
       setJson(JSON.stringify(next.config, null, 2));
-      saveRuntimeConfig(next.config, "Reset to demo config");
+      saveRuntimeConfig(next.config, userId, "Reset to demo config");
       window.dispatchEvent(new CustomEvent("genstack:config-applied"));
       
       setLastSaved(new Date().toISOString());
@@ -193,7 +196,7 @@ export default function ConfigPage(): JSX.Element {
       );
       setResult(next);
       setJson(JSON.stringify(next.config, null, 2));
-      saveRuntimeConfig(next.config, `Restored version v1.0.${version}`);
+      saveRuntimeConfig(next.config, userId, `Restored version v1.0.${version}`);
       window.dispatchEvent(new CustomEvent("genstack:config-applied"));
 
       setLastSaved(new Date().toISOString());

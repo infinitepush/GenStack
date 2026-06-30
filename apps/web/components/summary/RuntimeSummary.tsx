@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { buildConfigDownloadName, downloadJson } from "@/lib/download-json";
 import { loadReviewerDemoData } from "@/lib/demo-data";
@@ -55,6 +56,8 @@ function apiBase(): string {
 
 export function RuntimeSummary({ locale }: RuntimeSummaryProps): JSX.Element {
   const t = useTranslations();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -219,7 +222,7 @@ export function RuntimeSummary({ locale }: RuntimeSummaryProps): JSX.Element {
   }, []);
 
   const handleLoadDemoData = (): void => {
-    loadReviewerDemoData();
+    loadReviewerDemoData(userId);
     window.dispatchEvent(new CustomEvent("genstack:config-applied"));
     toast.success("Reviewer demo data loaded");
   };

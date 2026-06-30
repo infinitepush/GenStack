@@ -193,8 +193,8 @@ const demoSeeds: DemoSeed[] = [
   }
 ];
 
-export function loadReviewerDemoData(): GenerationHistoryEntry[] {
-  clearGenerationHistory();
+export function loadReviewerDemoData(userId: string): GenerationHistoryEntry[] {
+  clearGenerationHistory(userId);
 
   const now = Date.now();
   const firstDemoSeed = demoSeeds[0];
@@ -202,7 +202,7 @@ export function loadReviewerDemoData(): GenerationHistoryEntry[] {
     .slice()
     .reverse()
     .forEach((seed, index) => {
-      saveGenerationHistory({
+      saveGenerationHistory(userId, {
         appName: seed.config.app.name,
         prompt: seed.prompt,
         generationMode: seed.generationMode,
@@ -217,11 +217,11 @@ export function loadReviewerDemoData(): GenerationHistoryEntry[] {
       });
   });
 
-  if (!getActiveRuntime()) {
-    saveRuntimeConfig(cloneConfig(firstDemoSeed!.config), firstDemoSeed!.prompt);
+  if (!getActiveRuntime(userId)) {
+    saveRuntimeConfig(cloneConfig(firstDemoSeed!.config), userId, firstDemoSeed!.prompt);
   }
 
-  return readGenerationHistory();
+  return readGenerationHistory(userId);
 }
 
 export function getReviewerDemoConfig(): AppConfig {

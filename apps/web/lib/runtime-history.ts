@@ -8,12 +8,27 @@ export interface RuntimeHistoryEntry {
   prompt?: string;
 }
 
-const HISTORY_KEY = "genstack.runtime.history";
-const ACTIVE_KEY = "genstack.runtime.active";
+const LEGACY_HISTORY_KEY = "genstack.runtime.history";
+const LEGACY_ACTIVE_KEY = "genstack.runtime.active";
 const MAX_HISTORY = 8;
+
+function historyKey(userId: string): string {
+  return `genstack.runtime.history.${userId}`;
+}
+
+function activeKey(userId: string): string {
+  return `genstack.runtime.active.${userId}`;
+}
 
 function storageAvailable(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function apiBase(): string {
+  if (typeof window !== "undefined") {
+    return "/api/backend";
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 }
 
 function isRuntimeHistoryEntry(value: unknown): value is RuntimeHistoryEntry {
@@ -35,11 +50,96 @@ function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function readRuntimeHistory(): RuntimeHistoryEntry[] {
+/**
+ * Migrate legacy global localStorage keys to user-scoped keys.
+ * Runs only once per user: if the legacy key exists and the scoped key does not.
+ */
+function migrateLegacyKeys(userId: string): void {
+  if (!storageAvailable()) return;
+
+  // Migrate history
+  const scopedHistoryKey = historyKey(userId);
+  const legacyHistory = window.localStorage.getItem(LEGACY_HISTORY_KEY);
+  if (legacyHistory && !window.localStorage.getItem(scopedHistoryKey)) {
+    window.localStorage.setItem(scopedHistoryKey, legacyHistory);
+    window.localStorage.removeItem(LEGACY_HISTORY_KEY);
+  }
+
+  // Migrate active runtime
+  const scopedActiveKey = activeKey(userId);
+  const legacyActive = window.localStorage.getItem(LEGACY_ACTIVE_KEY);
+  if (legacyActive && !window.localStorage.getItem(scopedActiveKey)) {
+    window.localStorage.setItem(scopedActiveKey, legacyActive);
+    window.localStorage.removeItem(LEGACY_ACTIVE_KEY);
+  }
+}
+
+export async function pushRuntimeHistoryToBackend(entries: RuntimeHistoryEntry[], userId: string): Promise<void> {
+  if (userId === "_anonymous") return;
+  try {
+    await fetch(`${apiBase()}/user-data/runtime_history`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ value: entries })
+    });
+  } catch (err) {
+    console.error("Failed to push runtime history to backend:", err);
+  }
+}
+
+export async function syncRuntimeHistoryWithBackend(userId: string): Promise<RuntimeHistoryEntry[]> {
   if (!storageAvailable()) return [];
+  migrateLegacyKeys(userId);
+
+  if (userId === "_anonymous") {
+    return readRuntimeHistory(userId);
+  }
 
   try {
-    const raw = window.localStorage.getItem(HISTORY_KEY);
+    const response = await fetch(`${apiBase()}/user-data/runtime_history`, { credentials: "include" });
+    if (response.ok) {
+      const body = await response.json();
+      if (body.success && Array.isArray(body.data)) {
+        const remoteHistory = body.data as RuntimeHistoryEntry[];
+        const localHistory = readRuntimeHistory(userId);
+        
+        // Merge histories by unique appName/id, keeping the newest entry
+        const mergedMap = new Map<string, RuntimeHistoryEntry>();
+        [...localHistory, ...remoteHistory].forEach((entry) => {
+          const existing = mergedMap.get(entry.appName);
+          if (!existing || new Date(entry.createdAt) > new Date(existing.createdAt)) {
+            mergedMap.set(entry.appName, entry);
+          }
+        });
+        
+        const merged = Array.from(mergedMap.values())
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, MAX_HISTORY);
+
+        // Update local storage
+        window.localStorage.setItem(historyKey(userId), JSON.stringify(merged));
+        
+        // Push merged state back to server if it changed
+        if (JSON.stringify(merged) !== JSON.stringify(remoteHistory)) {
+          await pushRuntimeHistoryToBackend(merged, userId);
+        }
+        
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to sync runtime history with backend:", err);
+  }
+  return readRuntimeHistory(userId);
+}
+
+export function readRuntimeHistory(userId: string): RuntimeHistoryEntry[] {
+  if (!storageAvailable()) return [];
+  migrateLegacyKeys(userId);
+
+  try {
+    const raw = window.localStorage.getItem(historyKey(userId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -49,29 +149,32 @@ export function readRuntimeHistory(): RuntimeHistoryEntry[] {
   }
 }
 
-export function getActiveRuntimeId(): string | null {
+export function getActiveRuntimeId(userId: string): string | null {
   if (!storageAvailable()) return null;
-  return window.localStorage.getItem(ACTIVE_KEY);
+  migrateLegacyKeys(userId);
+  return window.localStorage.getItem(activeKey(userId));
 }
 
-export function getActiveRuntime(): RuntimeHistoryEntry | null {
-  const activeId = getActiveRuntimeId();
+export function getActiveRuntime(userId: string): RuntimeHistoryEntry | null {
+  const activeId = getActiveRuntimeId(userId);
   if (!activeId) return null;
-  return readRuntimeHistory().find((entry) => entry.id === activeId) ?? null;
+  return readRuntimeHistory(userId).find((entry) => entry.id === activeId) ?? null;
 }
 
-export function writeRuntimeHistory(entries: RuntimeHistoryEntry[]): void {
+export function writeRuntimeHistory(entries: RuntimeHistoryEntry[], userId: string): void {
   if (!storageAvailable()) return;
-  window.localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, MAX_HISTORY)));
+  const sliced = entries.slice(0, MAX_HISTORY);
+  window.localStorage.setItem(historyKey(userId), JSON.stringify(sliced));
+  void pushRuntimeHistoryToBackend(sliced, userId);
 }
 
-export function setActiveRuntime(id: string): void {
+export function setActiveRuntime(id: string, userId: string): void {
   if (!storageAvailable()) return;
-  window.localStorage.setItem(ACTIVE_KEY, id);
+  window.localStorage.setItem(activeKey(userId), id);
 }
 
-export function saveRuntimeConfig(config: AppConfig, prompt?: string): RuntimeHistoryEntry {
-  const history = readRuntimeHistory();
+export function saveRuntimeConfig(config: AppConfig, userId: string, prompt?: string): RuntimeHistoryEntry {
+  const history = readRuntimeHistory(userId);
   const normalizedPrompt = prompt?.trim();
   const existingIndex = history.findIndex((entry) => entry.appName === config.app.name);
   const existing = existingIndex >= 0 ? history[existingIndex] : undefined;
@@ -84,23 +187,31 @@ export function saveRuntimeConfig(config: AppConfig, prompt?: string): RuntimeHi
   };
 
   const nextHistory = [entry, ...history.filter((item) => item.id !== entry.id)];
-  writeRuntimeHistory(nextHistory);
-  setActiveRuntime(entry.id);
+  writeRuntimeHistory(nextHistory, userId);
+  setActiveRuntime(entry.id, userId);
   return entry;
 }
 
-export function deleteRuntimeHistoryEntry(id: string): RuntimeHistoryEntry[] {
-  const nextHistory = readRuntimeHistory().filter((entry) => entry.id !== id);
-  writeRuntimeHistory(nextHistory);
-  if (getActiveRuntimeId() === id) {
+export function deleteRuntimeHistoryEntry(id: string, userId: string): RuntimeHistoryEntry[] {
+  const nextHistory = readRuntimeHistory(userId).filter((entry) => entry.id !== id);
+  writeRuntimeHistory(nextHistory, userId);
+  if (getActiveRuntimeId(userId) === id) {
     if (storageAvailable()) {
       if (nextHistory[0]) {
-        window.localStorage.setItem(ACTIVE_KEY, nextHistory[0].id);
+        window.localStorage.setItem(activeKey(userId), nextHistory[0].id);
       } else {
-        window.localStorage.removeItem(ACTIVE_KEY);
+        window.localStorage.removeItem(activeKey(userId));
       }
     }
   }
   return nextHistory;
 }
 
+/**
+ * Clear transient runtime caches for the given user on logout.
+ * Removes the active runtime selection but preserves persistent history.
+ */
+export function clearTransientRuntimeCache(userId: string): void {
+  if (!storageAvailable()) return;
+  window.localStorage.removeItem(activeKey(userId));
+}

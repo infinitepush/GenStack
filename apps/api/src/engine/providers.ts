@@ -604,15 +604,14 @@ export class GeminiProvider implements AiProvider {
 }
 
 export function createAiProvider(): AiProvider {
-  const geminiApiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-  const openAiApiKey = process.env.OPENAI_API_KEY ?? process.env.AI_API_KEY;
+  const geminiApiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? process.env.AI_API_KEY;
 
-  if (geminiApiKey && process.env.AI_PROVIDER !== "openai") {
-    return new GeminiProvider(geminiApiKey, process.env.GEMINI_MODEL, process.env.GEMINI_BASE_URL);
+  if (geminiApiKey && process.env.AI_PROVIDER === "gemini") {
+    return new OpenAiCompatibleProvider(geminiApiKey, process.env.AI_MODEL, process.env.AI_BASE_URL);
   }
 
-  if (openAiApiKey && process.env.AI_PROVIDER === "openai") {
-    return new OpenAiCompatibleProvider(openAiApiKey, process.env.AI_MODEL, process.env.AI_BASE_URL);
+  if (geminiApiKey && process.env.AI_PROVIDER === "gemini-native") {
+    return new GeminiProvider(geminiApiKey, process.env.GEMINI_MODEL, process.env.GEMINI_BASE_URL);
   }
 
   return new LocalHeuristicProvider();

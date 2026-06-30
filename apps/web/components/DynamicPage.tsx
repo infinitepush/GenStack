@@ -58,6 +58,7 @@ async function parseApiResponse<T>(response: Response): Promise<ApiResponse<T>> 
 export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
   const t = useTranslations();
   const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [dataByTable, setDataByTable] = useState<Record<string, DataRecord[]>>({});
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
@@ -69,7 +70,7 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     let isMounted = true;
     async function loadConfig(): Promise<void> {
       try {
-        const activeRuntime = getActiveRuntime();
+        const activeRuntime = getActiveRuntime(userId);
         if (!activeRuntime) {
           if (isMounted) {
             setHasActiveRuntime(false);
@@ -131,9 +132,6 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     setLoadingTables((previous) => ({ ...previous, [tableName]: true }));
     try {
       const headers: Record<string, string> = {};
-      if (session?.user?.id) {
-        headers["x-user-id"] = session.user.id;
-      }
       const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}`, {
         cache: "no-store",
         headers,
@@ -161,9 +159,6 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
 
   const createRecord = useCallback(async (tableName: string, payload: DataRecord): Promise<void> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (session?.user?.id) {
-      headers["x-user-id"] = session.user.id;
-    }
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}`, {
       method: "POST",
       headers,
@@ -180,9 +175,6 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
 
   const updateRecord = useCallback(async (tableName: string, id: string, payload: DataRecord): Promise<void> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (session?.user?.id) {
-      headers["x-user-id"] = session.user.id;
-    }
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, {
       method: "PUT",
       headers,
@@ -199,9 +191,6 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
 
   const deleteRecord = useCallback(async (tableName: string, id: string): Promise<void> => {
     const headers: Record<string, string> = {};
-    if (session?.user?.id) {
-      headers["x-user-id"] = session.user.id;
-    }
     const response = await fetch(`${apiBase()}/runtime/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers,

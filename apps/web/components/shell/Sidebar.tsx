@@ -8,13 +8,16 @@ import { useSession, signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import type { AppConfig, ConfigEngineResult } from "@genstack/config-types";
 import {
+  clearTransientRuntimeCache,
   deleteRuntimeHistoryEntry,
   getActiveRuntime,
   readRuntimeHistory,
   setActiveRuntime,
   saveRuntimeConfig,
+  syncRuntimeHistoryWithBackend,
   type RuntimeHistoryEntry
 } from "@/lib/runtime-history";
+import { getUserPreferences } from "@/lib/user-preferences";
 
 interface SidebarProps {
   locale: string;
@@ -38,6 +41,7 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
   const [runtimeConfig, setRuntimeConfig] = useState<AppConfig | null>(null);
   const [history, setHistory] = useState<RuntimeHistoryEntry[]>([]);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -59,11 +63,11 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
     route === "/analytics" ? <BarChart3 className="h-3.5 w-3.5" /> : <Gauge className="h-3.5 w-3.5" />;
 
   const syncFromHistory = useCallback((): void => {
-    const nextHistory = readRuntimeHistory();
-    const activeRuntime = getActiveRuntime();
+    const nextHistory = readRuntimeHistory(userId);
+    const activeRuntime = getActiveRuntime(userId);
     setHistory(nextHistory);
     setRuntimeConfig(activeRuntime?.config ?? null);
-  }, []);
+  }, [userId]);
 
   const restoreRuntime = useCallback(async (entry: RuntimeHistoryEntry): Promise<void> => {
     setIsRestoring(true);
@@ -78,20 +82,23 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
       if (!response.ok || !payload.success) {
         throw new Error(payload.error?.message ?? "Unable to restore runtime.");
       }
-      setActiveRuntime(entry.id);
+      setActiveRuntime(entry.id, userId);
       window.dispatchEvent(new CustomEvent("genstack:config-applied"));
       const firstRoute = entry.config.ui.pages[0]?.route ?? "/dashboard";
       router.push(`/${locale}${firstRoute}`);
     } catch {
-      setActiveRuntime(entry.id);
+      setActiveRuntime(entry.id, userId);
       syncFromHistory();
     } finally {
       setIsRestoring(false);
     }
-  }, [locale, router, syncFromHistory]);
+  }, [locale, router, syncFromHistory, userId]);
 
   useEffect(() => {
-    syncFromHistory();
+    syncRuntimeHistoryWithBackend(userId).then(() => {
+      syncFromHistory();
+    });
+    getUserPreferences(userId);
 
     async function hydrateActiveConfig() {
       try {
@@ -101,9 +108,9 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
           const apiConfig = body.data.config;
           // Hydrate locally if this is a custom generated app (not the default Expense Tracker)
           if (apiConfig.app.name !== "Expense Tracker") {
-            const activeRuntime = getActiveRuntime();
+            const activeRuntime = getActiveRuntime(userId);
             if (!activeRuntime || activeRuntime.config.app.name !== apiConfig.app.name) {
-              saveRuntimeConfig(apiConfig, "Hydrated from active database state");
+              saveRuntimeConfig(apiConfig, userId, "Hydrated from active database state");
               window.dispatchEvent(new CustomEvent("genstack:config-applied"));
             }
           }
@@ -121,7 +128,7 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
     return () => {
       window.removeEventListener("genstack:config-applied", onConfigApplied);
     };
-  }, [syncFromHistory]);
+  }, [syncFromHistory, userId]);
 
   return (
     <aside className="flex flex-col border-b border-line/60 bg-panel p-4 lg:min-h-screen lg:border-b-0 lg:border-r">
@@ -247,9 +254,9 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
                         aria-label={`Delete ${entry.appName}`}
                         className="rounded-md p-1.5 text-zinc-500 opacity-0 hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100 transition duration-150"
                         onClick={() => {
-                          const nextHistory = deleteRuntimeHistoryEntry(entry.id);
+                          const nextHistory = deleteRuntimeHistoryEntry(entry.id, userId);
                           setHistory(nextHistory);
-                          setRuntimeConfig(getActiveRuntime()?.config ?? null);
+                          setRuntimeConfig(getActiveRuntime(userId)?.config ?? null);
                         }}
                         type="button"
                       >
@@ -282,7 +289,10 @@ export function Sidebar({ locale }: SidebarProps): JSX.Element {
               <p className="text-[9px] text-zinc-500 font-mono">User Session</p>
             </div>
             <button
-              onClick={() => void signOut()}
+              onClick={() => {
+                clearTransientRuntimeCache(userId);
+                void signOut();
+              }}
               className="rounded-md p-1.5 text-zinc-400 hover:bg-danger/10 hover:text-danger-hover transition duration-150"
               title="Sign Out"
               type="button"

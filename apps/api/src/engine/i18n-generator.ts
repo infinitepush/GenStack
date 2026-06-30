@@ -157,8 +157,9 @@ export function generateI18nMessages(config: AppConfig): Record<string, Messages
 
   return Object.fromEntries(
     locales.map((locale) => {
+      const customTranslations = config.translations?.[locale] || {};
       if (locale === "en") {
-        return [locale, english];
+        return [locale, { ...english, ...customTranslations }];
       }
 
       const staticSet = staticTranslations[locale] || {};
@@ -171,7 +172,7 @@ export function generateI18nMessages(config: AppConfig): Record<string, Messages
         })
       );
 
-      return [locale, localizedMessages];
+      return [locale, { ...localizedMessages, ...customTranslations }];
     })
   );
 }

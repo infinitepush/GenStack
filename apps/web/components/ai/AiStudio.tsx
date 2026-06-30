@@ -3,6 +3,7 @@
 import { AlertTriangle, CheckCircle2, Columns2, Download, Dumbbell, Gauge, Hammer, History, Hospital, Play, Sparkles, Target, Wand2, Warehouse } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import type { AppConfig } from "@genstack/config-types";
 import { buildConfigDownloadName, downloadJson } from "@/lib/download-json";
@@ -11,6 +12,7 @@ import { getActiveRuntime, saveRuntimeConfig, type RuntimeHistoryEntry } from "@
 import {
   readGenerationHistory,
   saveGenerationHistory,
+  syncGenerationHistoryWithBackend,
   type GenerationHistoryEntry,
   type PromptIntentSnapshot
 } from "@/lib/generation-history";
@@ -193,6 +195,8 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 export function AiStudio(): JSX.Element {
   const router = useRouter();
   const params = useParams<{ locale: string }>();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
   const locale = params.locale ?? "en";
   const [prompt, setPrompt] = useState("");
   const [jsonInput, setJsonInput] = useState("");
@@ -234,11 +238,22 @@ export function AiStudio(): JSX.Element {
   const [recentPrompts, setRecentPrompts] = useState<string[]>([]);
 
   useEffect(() => {
-    setCurrentRuntime(getActiveRuntime());
-    setGenerationHistory(readGenerationHistory());
+    setCurrentRuntime(getActiveRuntime(userId));
     
-    // Load recent prompts from localStorage
-    const saved = localStorage.getItem("genstack:recent-prompts");
+    // Sync generation history from backend
+    syncGenerationHistoryWithBackend(userId).then((synced) => {
+      setGenerationHistory(synced);
+    });
+    
+    // Load recent prompts from user-scoped localStorage (with legacy migration)
+    const scopedKey = `genstack:recent-prompts.${userId}`;
+    const legacyKey = "genstack:recent-prompts";
+    const legacyData = localStorage.getItem(legacyKey);
+    if (legacyData && !localStorage.getItem(scopedKey)) {
+      localStorage.setItem(scopedKey, legacyData);
+      localStorage.removeItem(legacyKey);
+    }
+    const saved = localStorage.getItem(scopedKey);
     if (saved) {
       try {
         setRecentPrompts(JSON.parse(saved));
@@ -247,14 +262,46 @@ export function AiStudio(): JSX.Element {
       }
     }
 
+    // Sync recent prompts from database
+    async function syncRecentPrompts() {
+      if (userId === "_anonymous") return;
+      try {
+        const response = await fetch("/api/backend/user-data/recent_prompts", { credentials: "include" });
+        if (response.ok) {
+          const body = await response.json();
+          if (body.success && Array.isArray(body.data)) {
+            const remotePrompts = body.data as string[];
+            const localSaved = localStorage.getItem(`genstack:recent-prompts.${userId}`);
+            const localPrompts: string[] = localSaved ? JSON.parse(localSaved) : [];
+            const merged = Array.from(new Set([...localPrompts, ...remotePrompts])).slice(0, 20);
+            
+            setRecentPrompts(merged);
+            localStorage.setItem(`genstack:recent-prompts.${userId}`, JSON.stringify(merged));
+            
+            if (JSON.stringify(merged) !== JSON.stringify(remotePrompts)) {
+              await fetch("/api/backend/user-data/recent_prompts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ value: merged })
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync recent prompts:", err);
+      }
+    }
+    void syncRecentPrompts();
+
     const onConfigApplied = (): void => {
-      setCurrentRuntime(getActiveRuntime());
+      setCurrentRuntime(getActiveRuntime(userId));
     };
     window.addEventListener("genstack:config-applied", onConfigApplied);
     return () => {
       window.removeEventListener("genstack:config-applied", onConfigApplied);
     };
-  }, []);
+  }, [userId]);
 
   const runPipeline = async (): Promise<void> => {
     setIsGenerating(true);
@@ -264,7 +311,7 @@ export function AiStudio(): JSX.Element {
       setResult(next);
       setJsonInput(JSON.stringify(next.config, null, 2));
       const promptCoverage = getPromptCoveragePercent(next);
-      const nextHistory = saveGenerationHistory({
+      const nextHistory = saveGenerationHistory(userId, {
         appName: next.config.app.name,
         prompt: next.prompt,
         generationMode: next.generationMode,
@@ -279,9 +326,17 @@ export function AiStudio(): JSX.Element {
       setGenerationHistory(nextHistory);
       
       // Update and persist recent prompts list
-      const nextPrompts = [prompt, ...recentPrompts.filter(p => p !== prompt)].slice(0, 12);
+      const nextPrompts = [prompt, ...recentPrompts.filter(p => p !== prompt)].slice(0, 20);
       setRecentPrompts(nextPrompts);
-      localStorage.setItem("genstack:recent-prompts", JSON.stringify(nextPrompts));
+      localStorage.setItem(`genstack:recent-prompts.${userId}`, JSON.stringify(nextPrompts));
+      if (userId !== "_anonymous") {
+        fetch("/api/backend/user-data/recent_prompts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ value: nextPrompts })
+        }).catch(err => console.error("Failed to post recent prompts:", err));
+      }
 
       toast.success("Pipeline run completed");
     } catch (error: unknown) {
@@ -335,7 +390,7 @@ export function AiStudio(): JSX.Element {
         throw new Error("Verification failed. Persisted configuration does not match the applied configuration.");
       }
 
-      const savedRuntime = saveRuntimeConfig(verified.config, result?.prompt ?? prompt);
+      const savedRuntime = saveRuntimeConfig(verified.config, userId, result?.prompt ?? prompt);
       setCurrentRuntime(savedRuntime);
       window.dispatchEvent(new CustomEvent("genstack:config-applied"));
       
@@ -360,9 +415,9 @@ export function AiStudio(): JSX.Element {
   };
 
   const loadDemoData = (): void => {
-    const nextHistory = loadReviewerDemoData();
+    const nextHistory = loadReviewerDemoData(userId);
     setGenerationHistory(nextHistory);
-    setCurrentRuntime(getActiveRuntime());
+    setCurrentRuntime(getActiveRuntime(userId));
     window.dispatchEvent(new CustomEvent("genstack:config-applied"));
     toast.success("Reviewer demo data loaded");
   };

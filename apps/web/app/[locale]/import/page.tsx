@@ -195,9 +195,6 @@ export default function ImportPage(): JSX.Element {
     setIsBusy(true);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (session?.user?.id) {
-        headers["x-user-id"] = session.user.id;
-      }
       const response = await fetch(`${apiBase()}/import/ingest`, {
         method: "POST",
         headers,

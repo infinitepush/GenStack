@@ -109,9 +109,32 @@ export default function TranslationsPage(): JSX.Element {
 
   const saveTranslations = async () => {
     setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
     try {
+      // 1. Fetch current configuration
+      const configRes = await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" });
+      const configBody = await configRes.json();
+      if (!configBody.success || !configBody.data?.config) {
+        throw new Error(configBody.error?.message ?? "Failed to fetch configuration.");
+      }
+      
+      const config = configBody.data.config;
+      config.translations = messages;
+
+      // 2. Save updated configuration
+      const saveRes = await fetch(`${apiBase()}/config?origin=translations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(config)
+      });
+      const saveBody = await saveRes.json();
+      if (!saveRes.ok || !saveBody.success) {
+        throw new Error(saveBody.error?.message ?? "Failed to save configuration translations.");
+      }
+
+      window.dispatchEvent(new CustomEvent("genstack:config-applied"));
+
+      // 3. Log activity
       await fetch(`${apiBase()}/runtime/activity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,12 +144,13 @@ export default function TranslationsPage(): JSX.Element {
           message: `Saved changes to translation keys for locale "${selectedLocale}".`
         })
       });
-    } catch (err) {
-      console.error("Failed to log translations changed activity:", err);
+
+      toast.success("Translations saved successfully!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save translations");
+    } finally {
+      setIsSaving(false);
     }
-    
-    setIsSaving(false);
-    toast.success("Translations saved successfully!");
   };
 
   const downloadTranslation = (locale: string) => {

@@ -250,14 +250,27 @@ npm install
 Create a `.env` file.
 
 ```env
-DATABASE_URL=
+DATABASE_URL="postgresql://username:password@localhost:5432/genstack"
+NEXTAUTH_SECRET="your-random-secret"
+NEXTAUTH_URL="http://localhost:3000"
+NEXT_PUBLIC_API_URL="http://localhost:4000"
+API_PORT="4000"
 
-NEXTAUTH_SECRET=
+AI_PROVIDER="gemini"
+GEMINI_API_KEY="AIzaSy..."
+AI_MODEL="gemini-2.5-flash"
+AI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
 
-NEXTAUTH_URL=
-
-GOOGLE_API_KEY=
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
 ```
+
+## Detailed Technical Documentation
+
+For more in-depth architecture and storage guides:
+- [ARCHITECTURE.md](file:///e:/projects/GenStack/ARCHITECTURE.md) — System flow, data flow, pipeline architecture.
+- [STORAGE.md](file:///e:/projects/GenStack/STORAGE.md) — AppState keys, database schema, caching strategy.
+- [MIGRATION.md](file:///e:/projects/GenStack/MIGRATION.md) — Legacy storage upgrade guide, environment variable renames.
 
 ## Start the Development Server
 
