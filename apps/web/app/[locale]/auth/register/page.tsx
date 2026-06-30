@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { Layers3 } from "lucide-react";
+import { Layers3, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function RegisterPage(): JSX.Element {
@@ -123,9 +123,16 @@ export default function RegisterPage(): JSX.Element {
           />
           <button
             disabled={isSubmitting}
-            className="w-full rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 shadow-none"
+            className="flex items-center justify-center gap-2 w-full rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 shadow-none"
           >
-            {isSubmitting ? "Creating account..." : "Register"}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Creating account...
+              </>
+            ) : (
+              "Register"
+            )}
           </button>
         </form>
 

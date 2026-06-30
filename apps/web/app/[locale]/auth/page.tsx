@@ -1,6 +1,6 @@
 "use client";
 
-import { Github, Layers3 } from "lucide-react";
+import { Github, Layers3, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -110,9 +110,16 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
               />
               <button
                 disabled={isSubmitting}
-                className="w-full rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 shadow-none"
+                className="flex items-center justify-center gap-2 w-full rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 shadow-none"
               >
-                {isSubmitting ? "Signing in..." : "Continue with email"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Continue with email"
+                )}
               </button>
             </form>
           ) : null}
