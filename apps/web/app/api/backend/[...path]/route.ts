@@ -73,8 +73,8 @@ async function proxyRequest(
     // Stream the response body back
     const responseHeaders: Record<string, string> = {};
     upstream.headers.forEach((value, key) => {
-      // Skip headers that Next.js manages itself
-      if (!["content-encoding", "transfer-encoding", "connection", "keep-alive"].includes(key.toLowerCase())) {
+      // Skip headers that Next.js/Vercel manage themselves to avoid chunking/length mismatches
+      if (!["content-encoding", "transfer-encoding", "connection", "keep-alive", "content-length"].includes(key.toLowerCase())) {
         responseHeaders[key] = value;
       }
     });
