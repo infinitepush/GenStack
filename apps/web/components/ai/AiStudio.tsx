@@ -397,7 +397,10 @@ export function AiStudio(): JSX.Element {
       const changeText = next.changes && next.changes.length > 0
         ? `\nApplied Changes:\n${next.changes.join("\n")}`
         : "";
-      toast.success(`Config applied successfully (v1.0.${next.version})${changeText}`);
+      if (changeText) {
+        console.log(changeText);
+      }
+      toast.success(`Config applied successfully (v1.0.${next.version})`);
 
       const firstRoute = verified.config.ui.pages[0]?.route ?? "/dashboard";
       router.push(`/${locale}${firstRoute}`);
