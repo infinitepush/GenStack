@@ -1,10 +1,11 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { toast } from "sonner";
 import type { AppConfig, ComponentConfig, ConfigEngineResult, DatabaseTableConfig, PageConfig } from "@genstack/config-types";
 import { getComponentRenderer, type DataRecord } from "@/components/registry";
 import { getActiveRuntime } from "@/lib/runtime-history";
@@ -65,6 +66,7 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
   const [hasActiveRuntime, setHasActiveRuntime] = useState(true);
   const [loadingTables, setLoadingTables] = useState<Record<string, boolean>>({});
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [isGeneratingSampleData, setIsGeneratingSampleData] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -203,6 +205,28 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     await loadTable(tableName);
   }, [loadTable, session]);
 
+  const handleGenerateSampleData = useCallback(async (): Promise<void> => {
+    setIsGeneratingSampleData(true);
+    try {
+      const response = await fetch(`${apiBase()}/demo-data`, {
+        method: "POST",
+        credentials: "include"
+      });
+      const body = await response.json() as { success: boolean; data?: { totalInserted: number; tables: { tableName: string; inserted: number }[] }; error?: { message: string } };
+      if (!response.ok || !body.success) {
+        throw new Error(body.error?.message ?? "Sample data generation failed.");
+      }
+      const total = body.data?.totalInserted ?? 0;
+      toast.success(`Added ${total} sample records.`);
+      // Refresh all active data sources
+      dataSources.forEach((source) => void loadTable(source));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Failed to generate sample data.");
+    } finally {
+      setIsGeneratingSampleData(false);
+    }
+  }, [dataSources, loadTable]);
+
    if (isLoadingConfig) {
     return (
       <div className="space-y-4">
@@ -248,6 +272,9 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     );
   }
 
+  // Determine if any data source table is empty
+  const hasEmptyTable = dataSources.some((s) => (dataByTable[s] ?? []).length === 0);
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -255,14 +282,38 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">Config-rendered page</p>
           <h1 className="mt-1.5 text-2xl font-bold text-zinc-100">{page.name}</h1>
         </div>
-        <button
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-elevated/20 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-elevated/50 hover:text-zinc-100 transition duration-150"
-          onClick={() => dataSources.forEach((source) => void loadTable(source))}
-          type="button"
-        >
-          <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-elevated/20 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-elevated/50 hover:text-zinc-100 transition duration-150"
+            onClick={() => dataSources.forEach((source) => void loadTable(source))}
+            type="button"
+          >
+            <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
+            Refresh
+          </button>
+          <button
+            disabled={isGeneratingSampleData}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-xs font-semibold transition duration-150 disabled:opacity-60 disabled:cursor-not-allowed ${
+              hasEmptyTable
+                ? "border-accent/50 bg-accent/10 text-accent hover:bg-accent/20"
+                : "border-line bg-elevated/20 text-zinc-400 hover:bg-elevated/50 hover:text-zinc-300"
+            }`}
+            onClick={() => void handleGenerateSampleData()}
+            type="button"
+          >
+            {isGeneratingSampleData ? (
+              <>
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5" />
+                {hasEmptyTable ? "✨ Generate Sample Data" : "Generate Demo Data"}
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {runtimeError ? (

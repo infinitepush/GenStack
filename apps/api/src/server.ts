@@ -26,6 +26,7 @@ import { createDynamicRouter } from "./routes/dynamic-router.js";
 import { createIntegrationsRouter } from "./routes/integrations-router.js";
 import { createUserDataRouter } from "./routes/user-data-router.js";
 import { authMiddleware } from "./lib/auth-middleware.js";
+import { generateSampleData } from "./engine/sample-data-generator.js";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -214,6 +215,24 @@ app.use("/export", createExportRouter());
 app.use("/runtime", createDynamicRouter());
 app.use("/integrations", createIntegrationsRouter());
 app.use("/user-data", createUserDataRouter());
+
+app.post("/demo-data", async (request: Request, response: Response) => {
+  const enabled = process.env.NODE_ENV !== "production" || process.env.DEMO_DATA_ENABLED === "true";
+  if (!enabled) {
+    response.status(403).json({ success: false, data: null, error: { code: "FORBIDDEN", message: "Sample data generation is disabled in production. Set DEMO_DATA_ENABLED=true to allow it." } });
+    return;
+  }
+  try {
+    const userId = request.userId;
+    const config = getCurrentConfig(userId);
+    const result = await generateSampleData(config, userId);
+    await addRuntimeActivity("CSV_IMPORTED", `Generated ${result.totalInserted} sample records across ${result.tables.length} table(s) via demo data generator.`, userId);
+    response.json({ success: true, data: result, error: null });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to generate sample data.";
+    response.status(500).json({ success: false, data: null, error: { code: "DEMO_DATA_FAILED", message } });
+  }
+});
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   const message = error instanceof Error ? error.message : "Unexpected server error.";
