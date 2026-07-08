@@ -42,8 +42,9 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
         return;
       }
 
-      router.push(result?.url ?? callbackUrl);
-      router.refresh();
+      // Hard navigate so the session cookie is sent with the next request.
+      // router.push does not reliably handle full NextAuth callback URLs.
+      window.location.href = result?.url ?? callbackUrl;
     } finally {
       setIsSubmitting(false);
     }
