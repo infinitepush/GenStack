@@ -1,6 +1,31 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Columns2, Download, Dumbbell, Gauge, Hammer, History, Hospital, Play, Sparkles, Target, Wand2, Warehouse } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Columns2,
+  Download,
+  Dumbbell,
+  Gauge,
+  Hammer,
+  History,
+  Hospital,
+  Play,
+  Sparkles,
+  Target,
+  Wand2,
+  Warehouse,
+  ArrowRight,
+  Sparkle,
+  Clock,
+  ExternalLink,
+  ChevronRight,
+  TrendingUp,
+  Cpu,
+  Layers3,
+  Bot,
+  Loader2
+} from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -95,7 +120,7 @@ const benchmarkPrompts = [
     icon: Target,
     title: "Sales CRM",
     prompt: "Create a sales CRM with leads, stages, company names, deal value, and pipeline analytics.",
-    detail: "Tests relational thinking and funnel metrics."
+    detail: "Tests relational thinking and funnel funnel metrics."
   },
   {
     icon: Hospital,
@@ -120,15 +145,15 @@ const benchmarkPrompts = [
 const generationSteps = ["Generating config", "Repairing schema", "Building runtime", "Preparing analytics"];
 
 function statusClass(status: StageStatus): string {
-  if (status === "error") return "border-danger/30 bg-danger/5 text-danger";
-  if (status === "warning") return "border-warning/30 bg-warning/5 text-warning";
-  return "border-line/60 bg-elevated/10 text-zinc-300";
+  if (status === "error") return "border-danger/35 bg-danger/5 text-danger";
+  if (status === "warning") return "border-warning/35 bg-warning/5 text-warning";
+  return "border-line bg-card/40 text-zinc-300";
 }
 
 function severityClass(severity: FindingSeverity): string {
-  if (severity === "error") return "border-danger/30 bg-danger/5 text-danger";
-  if (severity === "warning") return "border-warning/30 bg-warning/5 text-warning";
-  return "border-line bg-elevated/20 text-zinc-300";
+  if (severity === "error") return "border-danger/35 bg-danger/5 text-danger";
+  if (severity === "warning") return "border-warning/35 bg-warning/5 text-warning";
+  return "border-line bg-card/30 text-zinc-300";
 }
 
 function formatReadableLabel(value: string): string {
@@ -159,8 +184,8 @@ function generationModeLabel(mode: "structured" | "fallback"): string {
 
 function generationModeTone(mode: "structured" | "fallback"): string {
   return mode === "structured"
-    ? "border-line/60 bg-elevated/45 text-zinc-300"
-    : "border-warning/30 bg-warning/5 text-warning";
+    ? "border-line bg-card/45 text-zinc-300"
+    : "border-warning/35 bg-warning/5 text-warning";
 }
 
 function promptCoverageTone(percent: number): string {
@@ -198,18 +223,25 @@ export function AiStudio(): JSX.Element {
   const { data: session } = useSession();
   const userId = session?.user?.id ?? "_anonymous";
   const locale = params.locale ?? "en";
+
   const [prompt, setPrompt] = useState("");
   const [jsonInput, setJsonInput] = useState("");
   const [result, setResult] = useState<PipelineRunResult | null>(null);
   const [repair, setRepair] = useState<RepairResult | null>(null);
   const [currentRuntime, setCurrentRuntime] = useState<RuntimeHistoryEntry | null>(null);
   const [generationHistory, setGenerationHistory] = useState<GenerationHistoryEntry[]>([]);
+  
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [showDiff, setShowDiff] = useState(true);
   const [showReviewerInsights, setShowReviewerInsights] = useState(true);
+
+  // v2 Celebration & Autopilot State
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [isAutopilot, setIsAutopilot] = useState(false);
+  const [autopilotStep, setAutopilotStep] = useState("");
 
   const activeConfig = repair?.config ?? result?.config ?? currentRuntime?.config;
   const activeEvaluation = result?.evaluation;
@@ -237,15 +269,97 @@ export function AiStudio(): JSX.Element {
 
   const [recentPrompts, setRecentPrompts] = useState<string[]>([]);
 
+  // Autopilot script trigger
+  const runDemoAutopilot = async (): Promise<void> => {
+    setIsAutopilot(true);
+    setShowCelebration(false);
+    setResult(null);
+    setRepair(null);
+
+    try {
+      const demoPrompt = "Build an Employee Management system with departments, salary tracking, and performance analytics.";
+      setAutopilotStep("📋 Autofilling premium demo prompt...");
+      setPrompt(demoPrompt);
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      setAutopilotStep("🧠 AI Generator: Compiling schema and building routes...");
+      setIsGenerating(true);
+      const next = await postJson<PipelineRunResult>("/ai/generate", { prompt: demoPrompt });
+      setResult(next);
+      setJsonInput(JSON.stringify(next.config, null, 2));
+      const coverage = getPromptCoveragePercent(next);
+      
+      const nextHistory = saveGenerationHistory(userId, {
+        appName: next.config.app.name,
+        prompt: next.prompt,
+        generationMode: next.generationMode,
+        repairActions: next.repairActions,
+        validationScore: next.evaluation.score,
+        validationMaxScore: next.evaluation.maxScore,
+        promptCoverage: coverage,
+        grade: next.evaluation.grade,
+        intent: next.intent,
+        config: next.config
+      });
+      setGenerationHistory(nextHistory);
+      setIsGenerating(false);
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      setAutopilotStep("🚀 Activating database tables and starting CRUD API endpoints...");
+      setIsApplying(true);
+      const applied = await postJson<{ config: AppConfig; version: number; changes: string[] }>("/config?origin=ai-studio", next.config);
+      const savedRuntime = saveRuntimeConfig(applied.config, userId, demoPrompt);
+      setCurrentRuntime(savedRuntime);
+      window.dispatchEvent(new CustomEvent("genstack:config-applied"));
+      setIsApplying(false);
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      setAutopilotStep("✨ Inserting realistic sample mock data into employees...");
+      const mockRes = await fetch("/api/backend/demo-data", { method: "POST", credentials: "include" });
+      if (mockRes.ok) {
+        const body = await mockRes.json();
+        const total = body.data?.totalInserted ?? 12;
+        toast.success(`Demo Mode: Added ${total} employee records.`);
+      }
+      
+      setAutopilotStep("🎉 Redirecting to dashboard...");
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      toast.success("Demo Autopilot finished successfully!");
+      router.push(`/${locale}/dashboard`);
+    } catch (err: any) {
+      toast.error(`Autopilot error: ${err.message || "Something went wrong"}`);
+    } finally {
+      setIsAutopilot(false);
+      setIsGenerating(false);
+      setIsApplying(false);
+      setAutopilotStep("");
+    }
+  };
+
   useEffect(() => {
     setCurrentRuntime(getActiveRuntime(userId));
+
+    // Prefill check from landing redirect or Launchpad Example click
+    const prefill = sessionStorage.getItem("genstack:prefill-prompt");
+    if (prefill) {
+      setPrompt(prefill);
+      sessionStorage.removeItem("genstack:prefill-prompt");
+    }
+
+    // Auto trigger autopilot if landing page demo parameter is active
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("demo") === "true") {
+      // Clear URL parameter so it doesn't loop
+      window.history.replaceState({}, document.title, window.location.pathname);
+      void runDemoAutopilot();
+    }
     
     // Sync generation history from backend
     syncGenerationHistoryWithBackend(userId).then((synced) => {
       setGenerationHistory(synced);
     });
     
-    // Load recent prompts from user-scoped localStorage (with legacy migration)
+    // Load recent prompts from localStorage
     const scopedKey = `genstack:recent-prompts.${userId}`;
     const legacyKey = "genstack:recent-prompts";
     const legacyData = localStorage.getItem(legacyKey);
@@ -262,7 +376,6 @@ export function AiStudio(): JSX.Element {
       }
     }
 
-    // Sync recent prompts from database
     async function syncRecentPrompts() {
       if (userId === "_anonymous") return;
       try {
@@ -306,6 +419,7 @@ export function AiStudio(): JSX.Element {
   const runPipeline = async (): Promise<void> => {
     setIsGenerating(true);
     setRepair(null);
+    setShowCelebration(false);
     try {
       const next = await postJson<PipelineRunResult>("/ai/generate", { prompt });
       setResult(next);
@@ -325,7 +439,6 @@ export function AiStudio(): JSX.Element {
       });
       setGenerationHistory(nextHistory);
       
-      // Update and persist recent prompts list
       const nextPrompts = [prompt, ...recentPrompts.filter(p => p !== prompt)].slice(0, 20);
       setRecentPrompts(nextPrompts);
       localStorage.setItem(`genstack:recent-prompts.${userId}`, JSON.stringify(nextPrompts));
@@ -338,7 +451,7 @@ export function AiStudio(): JSX.Element {
         }).catch(err => console.error("Failed to post recent prompts:", err));
       }
 
-      toast.success("Pipeline run completed");
+      toast.success("AI Generation completed!");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Pipeline failed");
     } finally {
@@ -372,10 +485,8 @@ export function AiStudio(): JSX.Element {
     setIsApplying(true);
     try {
       const baseUrl = typeof window !== "undefined" ? "/api/backend" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000");
-      
       const next = await postJson<{ config: AppConfig; version: number; changes: string[] }>("/config?origin=ai-studio", activeConfig);
       
-      // Fetch again to verify
       const getResponse = await fetch(`${baseUrl}/config`, { cache: "no-store", credentials: "include" });
       const getPayload = (await getResponse.json()) as ApiResponse<{ config: AppConfig }>;
       if (!getResponse.ok || !getPayload.success || !getPayload.data) {
@@ -383,8 +494,6 @@ export function AiStudio(): JSX.Element {
       }
       
       const verified = getPayload.data;
-      
-      // Compare hashes (JSON strings)
       const match = JSON.stringify(verified.config) === JSON.stringify(next.config);
       if (!match) {
         throw new Error("Verification failed. Persisted configuration does not match the applied configuration.");
@@ -400,10 +509,9 @@ export function AiStudio(): JSX.Element {
       if (changeText) {
         console.log(changeText);
       }
+      
       toast.success(`Config applied successfully (v1.0.${next.version})`);
-
-      const firstRoute = verified.config.ui.pages[0]?.route ?? "/dashboard";
-      router.push(`/${locale}${firstRoute}`);
+      setShowCelebration(true); // Open celebration panel instead of immediate push
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Unable to apply config");
     } finally {
@@ -426,94 +534,173 @@ export function AiStudio(): JSX.Element {
   };
 
   return (
-    <div className="grid gap-8 xl:grid-cols-[1fr_460px]">
-      <section className="space-y-8">
-        <div className="rounded-lg border border-line bg-panel p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-accent">AI Runtime Studio</p>
-              <h1 className="mt-2.5 text-2xl font-bold tracking-tight text-white">Generate a working internal tool</h1>
-              <p className="mt-1 text-xs text-zinc-400">
-                Describe an application, and GenStack will compile a schema, dynamic CRUD endpoints, forms, tables, and analytics.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-zinc-500" />
+    <div className="grid gap-8 xl:grid-cols-[1fr_420px] max-w-[1600px] mx-auto pb-12">
+      <section className="space-y-6">
+        {/* Title / Description */}
+        <div className="premium-card p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider text-accent uppercase">
+              AI App Compiler
+            </span>
+            <h1 className="mt-2 text-2xl font-bold text-zinc-100 tracking-tight">AI Generation Hub</h1>
+            <p className="mt-1 text-xs text-zinc-400">
+              Generate tables, dynamic pages, CRUD forms, and visual analytics instantly.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={runDemoAutopilot}
+              disabled={isAutopilot || isGenerating || isApplying}
+              className="premium-btn-secondary px-4 flex items-center gap-2 h-9 text-xs"
+            >
+              🎬 Watch Demo Autopilot
+            </button>
+          </div>
+        </div>
+
+        {/* Autopilot Status Bar */}
+        {isAutopilot && (
+          <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 flex items-center gap-3 animate-pulse">
+            <Loader2 className="h-4 w-4 text-accent animate-spin" />
+            <p className="text-xs text-accent font-mono font-semibold">{autopilotStep}</p>
+          </div>
+        )}
+
+        {/* Celebration Panel */}
+        {showCelebration && activeConfig && (
+          <div className="premium-card border-accent/40 bg-accent/5 p-6 md:p-8 relative overflow-hidden animate-fadeIn">
+            {/* Ambient subtle green glow */}
+            <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 bg-[radial-gradient(circle_at_center,rgba(22,163,74,0.12),transparent_70%)] glow-blob" />
+            <div className="flex items-start gap-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/20 text-accent">
+                <Sparkle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <h2 className="text-lg font-bold text-zinc-100">🎉 Your application is ready!</h2>
+                <p className="text-xs text-zinc-400">
+                  GenStack has successfully applied &ldquo;{activeConfig.app.name}&rdquo; into the active runtime workspace.
+                </p>
+                <div className="mt-6 grid sm:grid-cols-2 gap-3.5">
+                  <button
+                    onClick={() => router.push(`/${activeConfig.app.locale}/dashboard`)}
+                    className="premium-btn-primary flex items-center justify-between px-4 py-2 h-10 text-xs text-left"
+                  >
+                    <span>✓ Open Dashboard</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch("/api/backend/demo-data", { method: "POST", credentials: "include" });
+                      if (res.ok) {
+                        toast.success("Mock sample data loaded successfully!");
+                        router.push(`/${activeConfig.app.locale}/dashboard`);
+                      }
+                    }}
+                    className="premium-btn-secondary flex items-center justify-between px-4 py-2 h-10 text-xs text-left"
+                  >
+                    <span>✓ Insert Mock Data</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => router.push(`/${activeConfig.app.locale}/config`)}
+                    className="premium-btn-secondary flex items-center justify-between px-4 py-2 h-10 text-xs text-left"
+                  >
+                    <span>✓ Customize JSON Config</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => router.push(`/${activeConfig.app.locale}/export`)}
+                    className="premium-btn-secondary flex items-center justify-between px-4 py-2 h-10 text-xs text-left"
+                  >
+                    <span>✓ Export to GitHub</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="mt-8 border-t border-line/40 pt-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 font-mono">Benchmark Prompts</p>
-                <p className="mt-1 text-xs text-zinc-500">Click any card to auto-fill a validation prompt.</p>
-              </div>
-              <span className="rounded-full border border-line/45 bg-elevated/40 px-2.5 py-0.5 text-[10px] font-mono text-zinc-400">Fast test suite</span>
+        {/* AI Studio prompt area */}
+        <div className="premium-card p-6 md:p-8 space-y-6">
+          {/* Benchmark suggestions */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500 font-mono">Not sure what to build?</label>
+              <span className="text-[10px] text-zinc-500 font-mono">Pre-tested prompts</span>
             </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              {benchmarkPrompts.map((template) => (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {benchmarkPrompts.map((b) => (
                 <button
-                  className="group rounded-lg border border-line/40 bg-elevated/10 p-3 text-left transition duration-150 hover:border-line/80 hover:bg-elevated/20"
-                  key={template.title}
-                  onClick={() => setPrompt(template.prompt)}
+                  key={b.title}
+                  onClick={() => setPrompt(b.prompt)}
+                  className="rounded-xl border border-line bg-card/40 hover:bg-hover px-3 py-1.5 text-xs text-zinc-300 transition duration-150 flex items-center gap-2"
                   type="button"
                 >
-                  <template.icon className="h-4 w-4 text-zinc-400 transition group-hover:text-zinc-200" />
-                  <p className="mt-2 text-xs font-semibold text-zinc-200">{template.title}</p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{template.detail}</p>
+                  <b.icon className="h-3.5 w-3.5 text-zinc-500" />
+                  <span>{b.title}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="mt-8 rounded-lg border border-line bg-elevated/25 p-2 transition duration-150 focus-within:border-accent focus-within:ring-0">
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Describe your internal tool (e.g. Build an Inventory Tracker with reorder alerts...)"
-              className="w-full min-h-28 resize-y bg-transparent p-3 text-xs text-zinc-100 placeholder-zinc-500 outline-none"
-            />
-            <div className="flex items-center justify-between border-t border-line/30 px-3 pt-2">
-              <button
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:bg-elevated hover:text-zinc-200 transition"
-                onClick={loadDemoData}
-                type="button"
-              >
-                <Wand2 className="h-3.5 w-3.5" />
-                Load Demo Data
-              </button>
-              <button
-                onClick={() => void runPipeline()}
-                disabled={isGenerating || prompt.trim().length === 0}
-                className="inline-flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isGenerating ? (
-                  <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-3.5 w-3.5" fill="currentColor" />
-                    Generate App
-                  </>
-                )}
-              </button>
+          {/* Prompt input */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-semibold text-zinc-300">Describe your application</span>
+              <span className="text-[10px] text-zinc-500 font-mono">Use details to customize fields</span>
+            </div>
+            <div className="relative rounded-xl border border-line bg-card/20 p-2 transition duration-200 focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/10">
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe your internal tool (e.g. Build a Sales CRM with lead names, conversions, and a conversions breakdown chart...)"
+                className="w-full min-h-28 resize-y bg-transparent p-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none leading-relaxed"
+                disabled={isAutopilot}
+              />
+              <div className="flex items-center justify-between border-t border-line/40 px-3 pt-2.5">
+                <button
+                  className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs text-zinc-400 hover:bg-hover hover:text-zinc-200 transition"
+                  onClick={loadDemoData}
+                  type="button"
+                >
+                  <Wand2 className="h-4 w-4 text-zinc-500" />
+                  Load Demo Data
+                </button>
+                <button
+                  onClick={() => void runPipeline()}
+                  disabled={isGenerating || isAutopilot || prompt.trim().length === 0}
+                  className="premium-btn-primary px-5 flex items-center gap-2 h-9 text-xs"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5 fill-current" />
+                      Generate App
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Recent Prompts Panel */}
+          {/* Recent Prompts */}
           {recentPrompts.length > 0 && (
-            <div className="mt-4 space-y-2">
+            <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 font-mono">Recent Prompts</p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {recentPrompts.map((p, idx) => (
                   <button
                     key={idx}
                     onClick={() => setPrompt(p)}
-                    className="max-w-[280px] md:max-w-[360px] truncate rounded border border-line/50 bg-elevated/10 hover:bg-elevated/35 px-2.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-200 text-left transition duration-150"
+                    className="max-w-[320px] truncate rounded-xl border border-line bg-card/30 hover:bg-hover px-3 py-1.5 text-[11px] font-mono text-zinc-400 hover:text-zinc-200 transition"
                     title={p}
                     type="button"
+                    disabled={isAutopilot}
                   >
                     {p}
                   </button>
@@ -522,481 +709,321 @@ export function AiStudio(): JSX.Element {
             </div>
           )}
 
-          {isGenerating ? (
-            <div className="mt-6 grid gap-3 md:grid-cols-4">
+          {/* Generation Pipeline animation */}
+          {isGenerating && (
+            <div className="grid gap-3 sm:grid-cols-4 pt-4 border-t border-line/40 animate-fadeIn">
               {generationSteps.map((step, index) => (
-                <div className="rounded-md border border-line bg-elevated/45 px-3 py-2 text-xs text-zinc-300" key={step}>
-                  <span className="mr-2 font-mono text-zinc-500">0{index + 1}</span>
-                  {step}...
+                <div className="rounded-xl border border-line bg-card/30 px-3.5 py-3 text-xs text-zinc-300 flex items-center gap-2" key={step}>
+                  <span className="font-mono text-zinc-500 text-[10px]">0{index + 1}</span>
+                  <span>{step}...</span>
                 </div>
               ))}
             </div>
-          ) : null}
+          )}
         </div>
 
-        {result ? (
-          <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-            <div className="rounded-lg border border-line/45 bg-panel p-5">
-              <p className="text-xs text-zinc-400 font-mono uppercase tracking-wider">Runtime status</p>
-              <div className="mt-3 flex items-end gap-2">
-                <span className={runtimeReady ? "text-2xl font-bold text-zinc-100" : "text-2xl font-bold text-warning"}>
+        {/* AI Reliability Grid */}
+        {result && (
+          <div className="grid gap-6 lg:grid-cols-[240px_1fr] animate-fadeIn">
+            <div className="premium-card p-5 space-y-4">
+              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">Evaluation Summary</p>
+              <div>
+                <span className={runtimeReady ? "text-xl font-bold text-zinc-100" : "text-xl font-bold text-warning"}>
                   {runtimeReady ? "Runtime Ready" : "Needs Review"}
                 </span>
+                <p className="text-[10px] text-zinc-500 font-mono mt-1">
+                  Grade {result.evaluation.grade} · {scorePercent}% score
+                </p>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 text-[10px]">
-                <span className={`rounded-full border px-2.5 py-1 ${generationModeTone(result.generationMode)}`}>
-                  Generation: {generationModeLabel(result.generationMode)}
-                </span>
-                <span className="rounded-full border border-line/60 bg-elevated/45 px-2.5 py-1 text-zinc-300">
-                  Coverage: {promptCoveragePercent}%
-                </span>
-                <span className="rounded-full border border-line bg-elevated/20 px-2.5 py-1 text-zinc-300">
-                  Repair: {result.repairActions}
-                </span>
+              <div className="space-y-2 text-xs text-zinc-400 font-mono border-t border-line/40 pt-4">
+                <p>• {result.config.database.tables.length} tables</p>
+                <p>• {result.config.api.endpoints.length} APIs</p>
+                <p>• {result.evaluation.blockers.length} blockers</p>
               </div>
-              <div className="mt-4 space-y-1.5 text-xs text-zinc-500">
-                <p>{result.config.database.tables.length} table(s) configured</p>
-                <p>{result.config.api.endpoints.length} CRUD API route(s) generated</p>
-                <p>{result.config.ui.pages.reduce((total, page) => total + page.components.length, 0)} runtime component(s)</p>
-                <p>{result.evaluation.blockers.length} blocking issue(s)</p>
+              <div className="pt-2">
+                <p className="text-[10px] text-zinc-500 font-mono">{result.provider} / {result.model}</p>
               </div>
-              <p className="mt-4 text-xs text-zinc-500 font-mono">
-                {result.provider} / {result.model}
-              </p>
-              <p className="mt-1 text-xs text-zinc-600">Evaluation grade {result.evaluation.grade} · {scorePercent}%</p>
             </div>
 
-            <div className="rounded-lg border border-line/45 bg-panel p-5">
-              <h2 className="text-sm font-medium text-zinc-200">Pipeline stages</h2>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="premium-card p-5 space-y-4">
+              <h2 className="text-sm font-semibold text-zinc-200 font-mono uppercase tracking-wider">Pipeline Execution</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
                 {result.stages.map((stage) => (
-                  <div key={stage.name} className={`rounded-lg border p-3 ${statusClass(stage.status)}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <span className="block text-sm font-medium capitalize">{stage.name}</span>
-                        <span className="mt-1 block text-[10px] uppercase tracking-[0.16em] opacity-80">
-                          {stage.name === "draft"
-                            ? generationModeLabel(result.generationMode)
-                            : stage.name === "repair"
-                              ? `${result.repairActions} Change${result.repairActions === 1 ? "" : "s"}`
-                              : stage.name === "evaluate"
-                                ? `Coverage ${promptCoveragePercent}%`
-                                : stage.name === "domain fallback"
-                                  ? "Safe runtime fallback"
-                                  : stage.status === "warning"
-                                    ? "Needs review"
-                                    : "Ready"}
-                        </span>
-                      </div>
-                      <span className="font-mono text-xs text-zinc-500">{stage.durationMs}ms</span>
+                  <div key={stage.name} className={`rounded-xl border p-3.5 ${statusClass(stage.status)}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold capitalize">{stage.name}</span>
+                      <span className="font-mono text-[10px] text-zinc-500">{stage.durationMs}ms</span>
                     </div>
-                    <p className="mt-2 text-xs opacity-80">{stage.message}</p>
+                    <p className="mt-2 text-[11px] leading-relaxed opacity-80">{stage.message}</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
-        ) : null}
+        )}
 
-        {result ? (
-          <div className="rounded-lg border border-line/45 bg-panel p-5">
-            <h2 className="text-sm font-medium text-zinc-200">Evaluation metrics</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {/* Evaluation breakdown */}
+        {result && (
+          <div className="premium-card p-6 space-y-5 animate-fadeIn">
+            <h2 className="text-sm font-bold text-zinc-200 font-mono uppercase tracking-wider">Validation Metrics</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
               {result.evaluation.metrics.map((metric) => (
-                <div key={metric.key} className="rounded-lg border border-line/40 bg-elevated/10 p-4">
+                <div key={metric.key} className="rounded-xl border border-line bg-card/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-zinc-200">{metric.label}</p>
-                    <p className="font-mono text-xs text-zinc-500">
-                      {metric.score}/{metric.maxScore}
-                    </p>
+                    <p className="text-xs font-bold text-zinc-200">{metric.label}</p>
+                    <p className="font-mono text-xs text-zinc-500">{metric.score}/{metric.maxScore}</p>
                   </div>
-                  <div className="mt-3 h-1.5 rounded-full bg-zinc-800">
+                  <div className="h-1.5 rounded-full bg-zinc-800">
                     <div
-                      className="h-1.5 rounded-full bg-indigo-electric"
+                      className="h-1.5 rounded-full bg-accent"
                       style={{ width: `${Math.round((metric.score / metric.maxScore) * 100)}%` }}
                     />
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-zinc-500">{metric.notes.join(" ")}</p>
+                  <p className="text-[11px] leading-relaxed text-zinc-400">{metric.notes.join(" ")}</p>
                 </div>
               ))}
             </div>
           </div>
-        ) : null}
+        )}
       </section>
 
-      <aside className="space-y-8">
+      {/* Sidebar Controls & History */}
+      <aside className="space-y-6">
+        {/* Workspace state / Actions */}
         {!activeConfig ? (
-          <div className="rounded-lg border border-line bg-panel p-6 shadow-sm">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">Empty workspace</p>
-            <h2 className="mt-3 text-xl font-semibold text-white">Ready to generate your first app</h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-400">
-              GenStack will create a schema, CRUD APIs, dashboard pages, forms, tables, and analytics from your prompt.
+          <div className="premium-card p-6 space-y-4">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-accent">Empty Workspace</p>
+            <h2 className="text-lg font-bold text-zinc-200">Generator Studio Ready</h2>
+            <p className="text-xs leading-relaxed text-zinc-400">
+              Submit a prompt to compile dynamic schemas and dashboard UI pages instantly.
             </p>
-            <div className="mt-6 space-y-2 text-sm text-zinc-300">
-              {["Generate schema", "Build runtime pages", "Wire CRUD endpoints", "Open generated dashboard"].map((item, index) => (
-                <div className="flex items-center gap-3 rounded-md border border-line/60 bg-elevated/20 px-3 py-2" key={item}>
-                  <span className="font-mono text-xs text-zinc-500">0{index + 1}</span>
-                  {item}
+            <div className="space-y-2 text-xs text-zinc-300 font-mono pt-2">
+              {["Generate database schema", "Build dashboard components", "Configure REST API routes", "Add mock sample data"].map((item, index) => (
+                <div className="flex items-center gap-3 rounded-xl border border-line bg-card/35 px-3.5 py-2.5" key={item}>
+                  <span className="text-zinc-500 font-bold">0{index + 1}</span>
+                  <span>{item}</span>
                 </div>
               ))}
             </div>
             <button
-              className="mt-5 inline-flex items-center gap-2 rounded-md border border-line bg-elevated/25 px-3.5 py-2 text-xs text-zinc-300 hover:bg-elevated/50 transition duration-150"
               onClick={loadDemoData}
+              className="w-full premium-btn-secondary flex items-center justify-center gap-2 h-10 text-xs"
               type="button"
             >
-              <Wand2 className="h-3.5 w-3.5 text-zinc-400" />
-              Load Demo Data
+              <Wand2 className="h-4 w-4" />
+              Load Reviewer Demo Data
             </button>
-            {currentRuntime ? (
-              <p className="mt-5 text-xs text-zinc-500">
-                Current runtime: <span className="text-zinc-300">{currentRuntime.appName}</span>. New configs will ask before replacing it.
-              </p>
-            ) : null}
           </div>
-        ) : null}
-
-        {activeConfig ? (
-          <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+        ) : (
+          <div className="premium-card p-6 space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-line/40 pb-4">
               <div>
-                <h2 className="text-sm font-medium text-zinc-200">Generated runtime</h2>
-                <p className="mt-1 text-xs text-zinc-500 font-mono">{activeConfig.app.name}</p>
+                <h2 className="text-sm font-semibold text-zinc-200">Generated Config</h2>
+                <p className="text-[10px] text-zinc-500 font-mono mt-0.5">{activeConfig.app.name}</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="inline-flex items-center gap-2 rounded-md border border-line bg-elevated/25 px-3 py-2 text-xs text-zinc-300 hover:bg-elevated/50 transition duration-150"
-                  onClick={downloadActiveConfig}
-                  type="button"
-                >
-                  <Download className="h-3.5 w-3.5 text-zinc-400" />
-                  Download JSON
-                </button>
-                <button
-                  className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-60 transition duration-150"
-                  disabled={isApplying}
-                  onClick={() => void applyConfig()}
-                >
-                  {isApplying ? "Applying..." : currentRuntime ? "Replace & Open App" : "Apply & Open App"}
-                </button>
+              <button
+                onClick={downloadActiveConfig}
+                className="rounded-xl border border-line bg-card/30 hover:bg-hover px-3 py-1.5 text-[11px] font-semibold text-zinc-300 flex items-center gap-2"
+                type="button"
+              >
+                <Download className="h-3.5 w-3.5 text-zinc-500" />
+                JSON
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+              <div className="rounded-xl border border-line bg-card/30 p-2.5">
+                <p className="text-base font-bold font-mono text-zinc-200">{activeConfig.database.tables.length}</p>
+                <p className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono">Tables</p>
+              </div>
+              <div className="rounded-xl border border-line bg-card/30 p-2.5">
+                <p className="text-base font-bold font-mono text-zinc-200">{activeConfig.ui.pages.length}</p>
+                <p className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono">Pages</p>
+              </div>
+              <div className="rounded-xl border border-line bg-card/30 p-2.5">
+                <p className="text-base font-bold font-mono text-zinc-200">{activeConfig.api.endpoints.length}</p>
+                <p className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono">APIs</p>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-3 gap-4 text-center">
-              <div className="rounded-md border border-line/40 bg-elevated/15 p-3">
-                <p className="text-lg font-semibold font-mono text-zinc-100">{activeConfig.database.tables.length}</p>
-                <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider mt-0.5">Tables</p>
+
+            <button
+              onClick={() => void applyConfig()}
+              disabled={isApplying || isAutopilot}
+              className="w-full premium-btn-primary flex items-center justify-center gap-2 h-10 text-xs"
+            >
+              <Sparkles className="h-4 w-4 animate-pulse" />
+              {isApplying ? "Applying..." : "Apply & Build Application"}
+            </button>
+          </div>
+        )}
+
+        {/* AI Reliability Grade Cards */}
+        {result && (
+          <div className="premium-card p-6 space-y-4 animate-fadeIn">
+            <h2 className="text-xs font-semibold text-zinc-200 font-mono uppercase tracking-wider">AI Reliability</h2>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-xl border border-line bg-card/20 p-3">
+                <span className="text-[9px] font-mono text-zinc-500 block uppercase">Mode</span>
+                <span className="font-bold text-zinc-200 mt-1 block">{result.generationMode}</span>
               </div>
-              <div className="rounded-md border border-line/40 bg-elevated/15 p-3">
-                <p className="text-lg font-semibold font-mono text-zinc-100">{activeConfig.ui.pages.length}</p>
-                <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider mt-0.5">Pages</p>
+              <div className="rounded-xl border border-line bg-card/20 p-3">
+                <span className="text-[9px] font-mono text-zinc-500 block uppercase">Confidence</span>
+                <span className="font-bold text-accent mt-1 block">{confidenceScore}%</span>
               </div>
-              <div className="rounded-md border border-line/40 bg-elevated/15 p-3">
-                <p className="text-lg font-semibold font-mono text-zinc-100">{activeConfig.api.endpoints.length}</p>
-                <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider mt-0.5">APIs</p>
+              <div className="rounded-xl border border-line bg-card/20 p-3">
+                <span className="text-[9px] font-mono text-zinc-500 block uppercase">Prompt Coverage</span>
+                <span className="font-bold text-zinc-200 mt-1 block">{promptCoveragePercent}%</span>
+              </div>
+              <div className="rounded-xl border border-line bg-card/20 p-3">
+                <span className="text-[9px] font-mono text-zinc-500 block uppercase">Repairs</span>
+                <span className="font-bold text-zinc-200 mt-1 block">{result.repairActions} actions</span>
               </div>
             </div>
           </div>
-        ) : null}
+        )}
 
-        {result ? (
-          <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-medium text-zinc-200">AI Reliability</h2>
-                <p className="mt-1 text-xs text-zinc-500">Reviewer-facing summary of generation quality and repair activity.</p>
-              </div>
-              <span className={`rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-mono ${generationModeTone(result.generationMode)}`}>
-                {result.generationMode}
-              </span>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-lg border border-line/40 bg-elevated/15 p-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-zinc-500">Generation Mode</p>
-                <p className="mt-2 text-xs font-semibold text-zinc-100">{generationModeLabel(result.generationMode)}</p>
-              </div>
-              <div className="rounded-lg border border-line/40 bg-elevated/15 p-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-zinc-500">Prompt Coverage</p>
-                <p className={`mt-2 text-xs font-semibold ${promptCoverageTone(promptCoveragePercent)}`}>{promptCoveragePercent}%</p>
-              </div>
-              <div className="rounded-lg border border-line/40 bg-elevated/15 p-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-zinc-500">AI Confidence Score</p>
-                <p className={`mt-2 text-xs font-semibold ${promptCoverageTone(confidenceScore)}`}>{confidenceScore}%</p>
-              </div>
-              <div className="rounded-lg border border-line/40 bg-elevated/15 p-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-zinc-500">Repair Actions</p>
-                <p className="mt-2 text-xs font-semibold text-zinc-100">{result.repairActions}</p>
-              </div>
-              <div className="rounded-lg border border-line/40 bg-elevated/15 p-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-zinc-500">Validation Score</p>
-                <p className="mt-2 text-xs font-semibold text-zinc-100">{validationScoreText}</p>
-              </div>
-            </div>
-            <div className="mt-4 rounded-lg border border-line/40 bg-elevated/10 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-zinc-500">Overall Grade</p>
-                <p className="text-sm font-semibold text-accent font-mono">{result.evaluation.grade}</p>
-              </div>
-              <div className="mt-3 h-1.5 rounded-full bg-zinc-800">
-                <div className="h-1.5 rounded-full bg-indigo-electric" style={{ width: `${scorePercent}%` }} />
-              </div>
-              <p className="mt-3 text-xs leading-5 text-zinc-500">
-                {validationMetric?.notes.join(" ") ?? "Prompt coverage and validation are surfaced above for reviewers."}
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xs font-semibold text-zinc-200">Reliability Metrics</h2>
-              <p className="mt-0.5 text-[10px] text-zinc-500">Aggregated local runs summary.</p>
-            </div>
-            <span className="rounded-full border border-line/60 bg-elevated/40 px-2 py-0.5 text-[10px] font-mono text-zinc-400">
+        {/* Global Quality Stats */}
+        <div className="premium-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold text-zinc-200 font-mono uppercase tracking-wider">Quality Stats</h2>
+            <span className="rounded-full border border-line bg-card/60 px-2 py-0.5 text-[9px] font-mono text-zinc-400">
               {reliability.totalRuns} runs
             </span>
           </div>
 
-          <div className="mt-3.5 divide-y divide-line/40 text-xs">
-            <div className="flex justify-between py-1.5 first:pt-0 last:pb-0">
-              <span className="text-zinc-500">Structured Runs</span>
-              <span className="font-semibold text-zinc-300 font-mono">{reliability.structuredRuns}</span>
+          <div className="space-y-2 text-xs font-mono">
+            <div className="flex justify-between py-1 border-b border-line/40">
+              <span className="text-zinc-500">Structured Generation</span>
+              <span className="text-zinc-300 font-bold">{reliability.structuredRuns}</span>
             </div>
-            <div className="flex justify-between py-1.5 first:pt-0 last:pb-0">
-              <span className="text-zinc-500">Fallback Runs</span>
-              <span className="font-semibold text-warning font-mono">{reliability.fallbackRuns}</span>
+            <div className="flex justify-between py-1 border-b border-line/40">
+              <span className="text-zinc-500">Repairs Applied</span>
+              <span className="text-zinc-300 font-bold">{reliability.averageRepairs.toFixed(1)} avg</span>
             </div>
-            <div className="flex justify-between py-1.5 first:pt-0 last:pb-0">
-              <span className="text-zinc-500">Average Repairs</span>
-              <span className="font-semibold text-zinc-300 font-mono">{reliability.averageRepairs.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between py-1.5 first:pt-0 last:pb-0">
-              <span className="text-zinc-500">Repair-Free Runs</span>
-              <span className="font-semibold text-zinc-300 font-mono">{reliability.repairFreeRuns}</span>
+            <div className="flex justify-between py-1 last:border-0">
+              <span className="text-zinc-500">Clean Complies</span>
+              <span className="text-emerald-400 font-bold">{reliability.repairFreeRuns} runs</span>
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xs font-semibold text-zinc-200">Reviewer Insights</h2>
-              <p className="mt-0.5 text-[10px] text-zinc-500 font-mono">Config validation & intent signals.</p>
-            </div>
+        {/* Reviewer Insights panel */}
+        <div className="premium-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold text-zinc-200 font-mono uppercase tracking-wider">Reviewer Insights</h2>
             <button
-              className="rounded-md border border-line bg-elevated/25 px-2.5 py-1 text-[10px] font-semibold text-zinc-300 hover:text-white hover:bg-elevated/50 transition duration-150"
-              onClick={() => setShowReviewerInsights((previous) => !previous)}
+              onClick={() => setShowReviewerInsights(!showReviewerInsights)}
+              className="text-[10px] font-bold text-accent font-mono uppercase tracking-wider"
               type="button"
             >
-              {showReviewerInsights ? "Collapse" : "Expand"}
+              {showReviewerInsights ? "Hide" : "Show"}
             </button>
           </div>
 
-          {showReviewerInsights ? (
-            <div className="mt-4 space-y-4 animate-fadeIn">
+          {showReviewerInsights && (
+            <div className="space-y-4 pt-2 border-t border-line/40 animate-fadeIn text-xs">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 font-mono">Detected Intent</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 font-mono">Intent Signals</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {result ? (
-                    <>
-                      {intentSignals.map((signal, index) => (
-                        <span
-                          className={index === 0 ? "rounded-full border border-accent/20 bg-accent/5 px-2 py-0.5 text-[10px] text-accent font-mono" : "rounded-full border border-line/60 bg-elevated/20 px-2 py-0.5 text-[10px] text-zinc-400 font-mono"}
-                          key={`${signal}-${index}`}
-                        >
-                          {signal}
-                        </span>
-                      ))}
-                    </>
+                    intentSignals.map((signal, idx) => (
+                      <span
+                        key={idx}
+                        className={idx === 0 ? "rounded-lg border border-accent/20 bg-accent/5 px-2 py-0.5 text-[10px] text-accent font-mono" : "rounded-lg border border-line bg-card/25 px-2 py-0.5 text-[10px] text-zinc-400 font-mono"}
+                      >
+                        {signal}
+                      </span>
+                    ))
                   ) : (
-                    <span className="text-xs text-zinc-500 leading-relaxed font-mono">Run a generation to inspect intent signals.</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Generate an app to view intent signals.</span>
                   )}
                 </div>
               </div>
 
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500 font-mono">Validation Findings</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 font-mono">Blockers Checker</p>
                 {result?.evaluation.blockers.length ? (
                   <div className="mt-2 space-y-1.5">
-                    {result.evaluation.blockers.slice(0, 3).map((finding) => (
-                      <div className="rounded-md border border-danger/25 bg-danger/5 p-2.5 text-[10px] text-zinc-300 font-mono" key={finding.path}>
-                        <p className="font-semibold text-danger">{finding.path}</p>
-                        <p className="mt-0.5 opacity-90">{finding.message}</p>
+                    {result.evaluation.blockers.slice(0, 3).map((blocker) => (
+                      <div className="rounded-xl border border-danger/35 bg-danger/5 p-2.5 font-mono text-[10px] text-zinc-300" key={blocker.path}>
+                        <p className="font-semibold text-danger">{blocker.path}</p>
+                        <p className="mt-0.5">{blocker.message}</p>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-zinc-400 font-medium">✓ No blocking findings.</p>
+                  <p className="text-[11px] text-zinc-400 font-semibold font-mono mt-1.5">✓ 0 blockers in current build.</p>
                 )}
               </div>
             </div>
-          ) : null}
+          )}
         </div>
 
-        <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
-                <History className="h-3.5 w-3.5 text-zinc-500" />
-                Generation History
-              </h2>
-              <p className="mt-0.5 text-[10px] text-zinc-500 font-mono">Repeated local quality logs.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full border border-line bg-elevated/40 px-2 py-0.5 text-[10px] font-mono text-zinc-400">
-                {generationHistory.length} runs
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-2">
+        {/* Generation History logs */}
+        <div className="premium-card p-6 space-y-4">
+          <h2 className="text-xs font-bold text-zinc-200 font-mono uppercase tracking-wider">Generation History</h2>
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {generationHistory.length > 0 ? (
               generationHistory.map((entry) => (
                 <button
                   key={entry.id}
                   type="button"
                   onClick={() => setPrompt(entry.prompt)}
-                  className="w-full rounded-lg border border-line/40 bg-elevated/10 p-2.5 text-left transition duration-150 hover:border-line hover:bg-elevated/20"
+                  className="w-full rounded-xl border border-line bg-card/20 p-3 text-left transition hover:border-line/80 hover:bg-card/45"
+                  disabled={isAutopilot}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-semibold text-zinc-200">{entry.appName}</p>
-                      <p className="mt-0.5 text-[9px] text-zinc-500 font-mono">{new Date(entry.createdAt).toLocaleString()}</p>
-                    </div>
-                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider ${generationModeTone(entry.generationMode)}`}>
+                  <div className="flex items-start justify-between">
+                    <span className="text-xs font-bold text-zinc-200 truncate block max-w-[150px]">{entry.appName}</span>
+                    <span className={`rounded px-1 text-[8px] font-mono uppercase tracking-wider ${generationModeTone(entry.generationMode)}`}>
                       {entry.generationMode}
                     </span>
                   </div>
-                  <div className="mt-2 flex items-center gap-3 text-[10px] text-zinc-400 font-mono">
-                    <span>Grade: <strong className="text-zinc-200 font-semibold">{entry.grade}</strong></span>
-                    <span className="text-zinc-700">•</span>
-                    <span>Coverage: <strong className="text-zinc-200 font-semibold">{entry.promptCoverage}%</strong></span>
-                    <span className="text-zinc-700">•</span>
-                    <span>Repairs: <strong className="text-zinc-200 font-semibold">{entry.repairActions}</strong></span>
-                  </div>
+                  <p className="text-[9px] text-zinc-500 mt-1 font-mono">{new Date(entry.createdAt).toLocaleDateString()}</p>
                 </button>
               ))
             ) : (
-              <div className="rounded-md border border-line/40 bg-elevated/5 p-4 text-xs text-zinc-500">
-                Generation history will appear here after you run a prompt.
-              </div>
+              <p className="text-xs text-zinc-500 font-mono">No previous generation runs logs.</p>
             )}
           </div>
         </div>
 
-        <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+        {/* Developer JSON Config details */}
+        <div className="premium-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-medium text-zinc-200">Config JSON</h2>
-              <p className="mt-1 text-xs text-zinc-500 font-mono">Developer details, hidden by default for demos.</p>
+              <h2 className="text-xs font-bold text-zinc-200 font-mono uppercase tracking-wider">Developer Inspector</h2>
+              <p className="text-[9px] text-zinc-500 font-mono mt-0.5">Direct configuration details</p>
             </div>
             <button
-              className="rounded-md border border-line bg-elevated/25 px-3 py-2 text-xs text-zinc-300 hover:bg-elevated/50 transition duration-150"
-              onClick={() => setShowJson((previous) => !previous)}
+              onClick={() => setShowJson(!showJson)}
+              className="text-[10px] font-bold text-accent font-mono uppercase tracking-wider"
               type="button"
             >
-              {showJson ? "Hide JSON" : "Show JSON"}
+              {showJson ? "Hide" : "Show"}
             </button>
           </div>
 
-          {showJson ? (
-            <>
-              <div className="mt-4 flex justify-end">
+          {showJson && (
+            <div className="space-y-3.5 pt-2 border-t border-line/40 animate-fadeIn">
+              <div className="flex justify-end">
                 <button
-                  onClick={() => void repairJson()}
+                  onClick={repairJson}
                   disabled={isRepairing || jsonInput.trim().length === 0}
-                  className="inline-flex items-center gap-2 rounded-md border border-line bg-elevated/25 px-3 py-2 text-xs text-zinc-300 disabled:opacity-60 hover:bg-elevated/50 transition duration-150"
+                  className="rounded-xl border border-line bg-card/40 hover:bg-hover px-3 py-1.5 text-xs text-zinc-300 disabled:opacity-60 transition flex items-center gap-1.5"
                 >
-                  <Hammer className="h-3.5 w-3.5 text-zinc-400" />
-                  {isRepairing ? "Repairing..." : "Repair"}
+                  <Hammer className="h-3.5 w-3.5 text-zinc-500" />
+                  {isRepairing ? "Repairing..." : "Run Repair"}
                 </button>
               </div>
               <textarea
                 value={jsonInput}
-                onChange={(event) => setJsonInput(event.target.value)}
-                placeholder="Generated config appears here. Paste config JSON to repair it."
-                className="mt-3 min-h-[360px] w-full resize-y rounded-md border border-line/50 bg-[#121212] p-4 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-accent"
+                onChange={(e) => setJsonInput(e.target.value)}
+                placeholder="Developer JSON schema configuration"
+                className="w-full min-h-60 rounded-xl border border-line bg-card/25 p-3 font-mono text-[11px] leading-relaxed text-zinc-300 outline-none focus:border-accent"
               />
-            </>
-          ) : (
-            <div className="mt-4 rounded-md border border-line/40 bg-elevated/5 p-4 text-xs text-zinc-500 leading-relaxed font-mono">
-              JSON is available for inspection and repair, but the primary flow is generation, runtime readiness, and opening the app.
             </div>
           )}
         </div>
-
-        {result ? (
-          <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-200">
-                  <Columns2 className="h-4 w-4 text-zinc-500" />
-                  Config Diff Viewer
-                </h2>
-                <p className="mt-1 text-xs text-zinc-500 font-mono">Original draft vs final normalized config.</p>
-              </div>
-              <button
-                className="rounded-md border border-line bg-elevated/25 px-3 py-2 text-xs text-zinc-300 hover:bg-elevated/50 transition duration-150"
-                onClick={() => setShowDiff((previous) => !previous)}
-                type="button"
-              >
-                {showDiff ? "Hide Diff" : "Show Diff"}
-              </button>
-            </div>
-
-            <p className="mt-3 text-xs text-zinc-500 font-mono">
-              {changedDiffLines} changed line{changedDiffLines === 1 ? "" : "s"} between the raw draft and the repaired config.
-            </p>
-
-            {showDiff ? (
-              <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                <div>
-                  <p className="text-xs font-mono uppercase tracking-[0.14em] text-zinc-500">Original Draft</p>
-                  <div className="mt-2 max-h-[360px] overflow-auto rounded-md border border-line/40 bg-elevated/15 font-mono text-[11px] leading-5 text-zinc-400">
-                    {diffLines.map((line) => (
-                      <div className={`grid grid-cols-[3rem_1fr] gap-3 px-3 py-1.5 ${line.changed ? "bg-danger/5 text-zinc-300" : ""}`} key={`draft-${line.lineNumber}`}>
-                        <span className="text-zinc-600">{line.lineNumber}</span>
-                        <span className="whitespace-pre-wrap break-words">{line.draft || " "}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-mono uppercase tracking-[0.14em] text-zinc-500">Final Config</p>
-                  <div className="mt-2 max-h-[360px] overflow-auto rounded-md border border-line/40 bg-elevated/15 font-mono text-[11px] leading-5 text-zinc-400">
-                    {diffLines.map((line) => (
-                      <div className={`grid grid-cols-[3rem_1fr] gap-3 px-3 py-1.5 ${line.changed ? "bg-success/5 text-zinc-200" : ""}`} key={`final-${line.lineNumber}`}>
-                        <span className="text-zinc-600">{line.lineNumber}</span>
-                        <span className="whitespace-pre-wrap break-words">{line.final || " "}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-md border border-line/40 bg-elevated/5 p-4 text-xs text-zinc-500 leading-relaxed font-mono">
-                Hidden for now. Toggle the diff viewer when you want to compare the raw draft with the repaired config.
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {(repair?.findings ?? result?.repair.findings ?? []).length > 0 ? (
-          <div className="rounded-lg border border-line/45 bg-panel p-5 shadow-sm">
-            <h2 className="text-sm font-medium text-zinc-200">Findings</h2>
-            <div className="mt-4 space-y-2">
-              {(repair?.findings ?? result?.repair.findings ?? []).slice(0, 8).map((finding, index) => (
-                <div key={`${finding.path}-${index}`} className={`rounded-md border p-3 ${severityClass(finding.severity)}`}>
-                  <div className="flex items-center gap-2">
-                    {finding.severity === "error" ? <AlertTriangle className="h-4 w-4 text-danger" /> : <CheckCircle2 className="h-4 w-4 text-zinc-400" />}
-                    <span className="font-mono text-xs">{finding.path}</span>
-                  </div>
-                  <p className="mt-2 text-xs opacity-85 leading-relaxed">{finding.message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </aside>
     </div>
   );

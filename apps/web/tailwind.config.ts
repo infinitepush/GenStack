@@ -5,30 +5,40 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#121212", // Neutral Dark
-        panel: "#181818",      // Softer Cards/Panels
-        elevated: "#1F1F1F",   // Input/Secondary Surface
-        line: "rgba(255, 255, 255, 0.06)", // Subtle, thin borders
-        indigo: {
-          electric: "#5E6AD2"  // Map electric purple/teal to Slate Blue
-        },
+        background: "#0D0F12", // Graphite dark background
+        panel: "#15181D",      // Secondary Background
+        card: "#1B1F24",       // Premium Card bg
+        hover: "#222831",      // Hover color
+        elevated: "#222831",   // Elevated inputs / dropdowns
+        line: "rgba(255, 255, 255, 0.08)", // Border
         accent: {
-          DEFAULT: "#5E6AD2",  // Slate Blue
-          hover: "#4C58C1",
-          light: "#828DF0"
+          DEFAULT: "#16A34A",  // Primary Accent (Emerald)
+          hover: "#22C55E",
+          light: "#86EFAC",
+          secondary: "#D4AF37" // Secondary Accent (Gold)
         },
         success: {
-          DEFAULT: "#10b981",  // Green
-          hover: "#059669"
+          DEFAULT: "#16A34A",  // Success (Emerald)
+          hover: "#22C55E"
         },
         warning: {
-          DEFAULT: "#f59e0b",  // Amber
-          hover: "#d97706"
+          DEFAULT: "#D97706",  // Warning (Amber)
+          hover: "#B45309"
         },
         danger: {
-          DEFAULT: "#ef4444",  // Red
-          hover: "#dc2626"
+          DEFAULT: "#DC2626",  // Danger (Red)
+          hover: "#B91C1C"
+        },
+        info: {
+          DEFAULT: "#64748B",
+          hover: "#475569"
         }
+      },
+      borderRadius: {
+        button: "14px",
+        card: "20px",
+        dialog: "24px",
+        input: "14px"
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "ui-sans-serif", "system-ui"],

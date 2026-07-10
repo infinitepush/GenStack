@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
+import { ProgressBreadcrumb } from "@/components/onboarding/ProgressBreadcrumb";
 import { appConfig } from "@/lib/app-config";
 
 interface LayoutWrapperProps {
@@ -24,9 +25,14 @@ export function LayoutWrapper({ children, locale }: LayoutWrapperProps): JSX.Ele
   }
 
   return (
-    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
+    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr] bg-background">
       <Sidebar locale={locale} />
-      <main className="min-w-0 px-5 py-6 lg:px-8">{children}</main>
+      <main className="min-w-0 px-5 py-6 lg:py-6 lg:pr-6 lg:pl-8 flex flex-col">
+        <ProgressBreadcrumb locale={locale} />
+        <div className="flex-1 w-full max-w-[1600px] mx-auto animate-fadeIn">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

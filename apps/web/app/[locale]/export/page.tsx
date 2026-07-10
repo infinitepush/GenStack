@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import { appConfig } from "@/lib/app-config";
 import type { AppConfig } from "@genstack/config-types";
 import { getActiveRuntime } from "@/lib/runtime-history";
+import { EmptyState } from "@/components/onboarding/EmptyState";
 
 interface ExportError {
   stage: string;
@@ -56,6 +57,7 @@ export default function ExportPage(): JSX.Element {
   const t = useTranslations();
   const { data: session } = useSession();
   const userId = session?.user?.id ?? "_anonymous";
+
   const [activeConfig, setActiveConfig] = useState<AppConfig>(appConfig);
   const [repoName, setRepoName] = useState("");
   const [token, setToken] = useState("");
@@ -64,6 +66,7 @@ export default function ExportPage(): JSX.Element {
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [exportStartTime, setExportStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [hasRuntime, setHasRuntime] = useState<boolean | null>(null);
 
   const stages = useMemo(
     () => [
@@ -75,9 +78,9 @@ export default function ExportPage(): JSX.Element {
     [job]
   );
 
-  // Dynamically resolve configuration on mount
   useEffect(() => {
     const runtime = getActiveRuntime(userId);
+    setHasRuntime(runtime !== null);
     const configToUse = runtime?.config ?? appConfig;
     setActiveConfig(configToUse);
     setRepoName(slugify(configToUse.app.name));
@@ -91,7 +94,6 @@ export default function ExportPage(): JSX.Element {
         setJob(next);
 
         if (next.status === "completed") {
-          // Log success timeline activity
           await fetch(`${apiBase()}/runtime/activity`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -163,7 +165,6 @@ export default function ExportPage(): JSX.Element {
       window.URL.revokeObjectURL(url);
       toast.success("ZIP archive downloaded successfully");
 
-      // Log success timeline activity
       await fetch(`${apiBase()}/runtime/activity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -180,15 +181,39 @@ export default function ExportPage(): JSX.Element {
     }
   };
 
+  if (hasRuntime === null) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+      </div>
+    );
+  }
+
+  if (!hasRuntime) {
+    return (
+      <EmptyState
+        locale={activeConfig.app.locale}
+        icon={<Github className="h-7 w-7 text-zinc-500" />}
+        title="No generated application to export"
+        description="GenStack allows compiling and exporting the generated Next.js code workspace to a ZIP folder or directly onto GitHub. Generate an application first."
+      />
+    );
+  }
+
   return (
-    <div className="grid gap-8 xl:grid-cols-[1fr_420px] max-w-[1600px] mx-auto">
+    <div className="grid gap-8 xl:grid-cols-[1fr_420px] max-w-[1600px] mx-auto pb-12 animate-fadeIn">
       <div className="space-y-6">
-        <section className="rounded-lg border border-line bg-panel p-6 md:p-8 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <Github className="h-6 w-6 text-zinc-400" />
+        {/* GitHub Export Card */}
+        <section className="premium-card p-6 md:p-8 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#16181D] border border-line text-zinc-300">
+              <Github className="h-5 w-5 text-accent" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold text-zinc-100">{t("nav_export")}</h1>
-              <p className="mt-1 text-xs text-zinc-400 leading-relaxed">Generate a standalone Next.js app and push it directly to GitHub.</p>
+              <span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider text-accent uppercase">
+                GitHub integration
+              </span>
+              <h1 className="text-xl font-bold text-zinc-100 tracking-tight mt-1">{t("nav_export")}</h1>
             </div>
           </div>
 
@@ -198,60 +223,59 @@ export default function ExportPage(): JSX.Element {
               <input
                 value={repoName}
                 onChange={(event) => setRepoName(event.target.value)}
-                className="w-full h-9 rounded-md border border-line/50 bg-[#121212] px-3 text-xs text-zinc-200 outline-none focus:border-accent focus:ring-0 transition"
+                className="w-full premium-input"
               />
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-zinc-400">GitHub Personal Access Token (PAT)</label>
-              </div>
+              <label className="block text-xs font-semibold text-zinc-400">GitHub Personal Access Token (PAT)</label>
               <input
                 value={token}
                 onChange={(event) => setToken(event.target.value)}
                 type="password"
                 placeholder="ghp_..."
-                className="w-full h-9 rounded-md border border-line/50 bg-[#121212] px-3 text-xs text-zinc-200 outline-none focus:border-accent focus:ring-0 transition"
+                className="w-full premium-input"
               />
               <p className="text-[10px] text-zinc-500 font-mono">Tokens are processed securely on the local backend and never stored.</p>
             </div>
             <button
               onClick={() => void startExport()}
               disabled={isStarting || token.trim().length === 0 || repoName.trim().length === 0}
-              className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent-hover transition disabled:opacity-50 shadow-none"
+              className="premium-btn-primary px-6 h-10 text-xs shadow-none"
             >
               {isStarting ? "Starting..." : t("btn_export")}
             </button>
           </div>
         </section>
 
-        <section className="rounded-lg border border-line bg-panel p-6 md:p-8 flex flex-col justify-between shadow-sm">
+        {/* ZIP Export Card */}
+        <section className="premium-card p-6 md:p-8 flex flex-col justify-between shadow-sm">
           <div>
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-lg border border-line/50 bg-elevated text-zinc-400">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#16181D] border border-line text-zinc-300">
                 <Archive className="h-5 w-5" />
               </div>
               <div>
                 <h2 className="text-sm font-bold text-zinc-200">Local ZIP Export</h2>
-                <p className="mt-0.5 text-xs text-zinc-400 leading-relaxed">Download your generated app instantly as a compressed ZIP file.</p>
+                <p className="mt-0.5 text-xs text-zinc-400">Download your generated app instantly as a compressed ZIP file.</p>
               </div>
             </div>
-            <p className="mt-3.5 text-[11px] leading-relaxed text-zinc-500">
+            <p className="mt-4 text-xs leading-relaxed text-zinc-500">
               No API credentials or tokens needed. You will receive a fully configured Next.js project with Tailwind CSS, Prisma schemas, and data visualizations ready to run locally.
             </p>
           </div>
           <button
             onClick={() => void downloadZip()}
             disabled={isDownloadingZip}
-            className="mt-6 rounded-md bg-elevated/30 border border-line hover:bg-elevated/50 px-4 py-2 text-xs font-semibold text-zinc-300 flex items-center justify-center gap-2 disabled:opacity-60 transition duration-150"
+            className="mt-6 premium-btn-secondary px-5 h-10 text-xs flex items-center justify-center gap-2"
           >
             {isDownloadingZip ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin text-accent" />
                 Generating ZIP...
               </>
             ) : (
               <>
-                <Download className="h-3.5 w-3.5" />
+                <Download className="h-4 w-4" />
                 Download ZIP Archive
               </>
             )}
@@ -260,9 +284,9 @@ export default function ExportPage(): JSX.Element {
       </div>
 
       <aside className="space-y-6">
-        {/* Onboarding Guide Card */}
-        <div className="rounded-lg border border-line bg-panel p-5 space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-line/40">
+        {/* PAT Guide */}
+        <div className="premium-card p-5 space-y-4 shadow-sm">
+          <div className="flex items-center gap-2 pb-2 border-b border-line">
             <HelpCircle className="h-4 w-4 text-accent" />
             <h2 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider font-mono">GitHub PAT Guide</h2>
           </div>
@@ -270,12 +294,10 @@ export default function ExportPage(): JSX.Element {
             GenStack uses a personal access token to create a repo and upload the code scaffold on your behalf.
           </p>
 
-          <div className="space-y-3.5 text-xs">
-            <div className="rounded-md bg-elevated/20 border border-line/40 p-3 space-y-2">
+          <div className="space-y-3 text-xs">
+            <div className="rounded-xl border border-line bg-card/25 p-3.5 space-y-2">
               <span className="font-semibold text-zinc-300 block">Option A: Fine-grained tokens (Recommended)</span>
-              <p className="text-zinc-500 text-[11px]">
-                Highly secure, scoped to specific repositories.
-              </p>
+              <p className="text-zinc-500 text-[10px]">Highly secure, scoped to specific repositories.</p>
               <a 
                 href="https://github.com/settings/personal-access-tokens/new" 
                 target="_blank" 
@@ -284,19 +306,14 @@ export default function ExportPage(): JSX.Element {
               >
                 Generate Token <ExternalLink className="h-3 w-3" />
               </a>
-              <div className="text-[10px] text-zinc-400 space-y-1 font-mono pt-1">
-                <p>• Repository access: <strong className="text-zinc-300">All</strong> or <strong className="text-zinc-300">Select repos</strong></p>
-                <p>• Administration: <strong className="text-emerald-400">Read & Write</strong></p>
-                <p>• Contents: <strong className="text-emerald-400">Read & Write</strong></p>
-                <p>• Metadata: <strong className="text-zinc-400">Read-only (auto)</strong></p>
+              <div className="text-[10px] text-zinc-500 space-y-1 font-mono pt-1">
+                <p>• Administration: <strong className="text-zinc-300">Read & Write</strong></p>
+                <p>• Contents: <strong className="text-zinc-300">Read & Write</strong></p>
               </div>
             </div>
 
-            <div className="rounded-md bg-elevated/20 border border-line/40 p-3 space-y-2">
+            <div className="rounded-xl border border-line bg-card/25 p-3.5 space-y-2">
               <span className="font-semibold text-zinc-300 block">Option B: Classic Tokens</span>
-              <p className="text-zinc-500 text-[11px]">
-                Legacy token style supporting broad scopes.
-              </p>
               <a 
                 href="https://github.com/settings/tokens/new" 
                 target="_blank" 
@@ -305,32 +322,30 @@ export default function ExportPage(): JSX.Element {
               >
                 Generate Classic Token <ExternalLink className="h-3 w-3" />
               </a>
-              <div className="text-[10px] text-zinc-400 space-y-1 font-mono pt-1">
-                <p>• Select scope: <strong className="text-emerald-400">repo</strong> (Full control of repositories)</p>
+              <div className="text-[10px] text-zinc-500 font-mono pt-1">
+                <p>• Select scope: <strong className="text-zinc-300">repo</strong> (Full control)</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Progress Card */}
-        <div className="rounded-lg border border-line bg-panel p-5 shadow-sm space-y-4">
+        <div className="premium-card p-5 space-y-4 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-semibold text-zinc-200">Progress</h2>
             {job && (job.status === "running" || job.status === "completed") && (
-              <span className="font-mono text-[10px] text-zinc-500">
-                Elapsed: {elapsedTime}s
-              </span>
+              <span className="font-mono text-[10px] text-zinc-500">Elapsed: {elapsedTime}s</span>
             )}
           </div>
-          <div className="mt-4 space-y-2.5">
+          <div className="space-y-2.5">
             {stages.map((stage) => (
-              <div key={stage.name} className="flex items-center gap-3 rounded-md border border-line/40 bg-elevated/10 p-2.5">
+              <div key={stage.name} className="flex items-center gap-3 rounded-xl border border-line bg-card/20 p-2.5">
                 {stage.complete ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-zinc-400" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                 ) : job?.status === "running" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+                  <Loader2 className="h-4 w-4 animate-spin text-accent" />
                 ) : (
-                  <div className="h-3.5 w-3.5 rounded-full border border-line/80" />
+                  <div className="h-4 w-4 rounded-full border border-line" />
                 )}
                 <span className="text-xs text-zinc-300 font-mono">{stage.name}</span>
               </div>
@@ -338,76 +353,36 @@ export default function ExportPage(): JSX.Element {
           </div>
         </div>
 
-        {job?.status === "completed" ? (
-          <div className="rounded-lg border border-line bg-[#181818] p-5 shadow-sm space-y-3.5">
+        {/* Completed Info */}
+        {job?.status === "completed" && (
+          <div className="premium-card p-5 shadow-sm space-y-3.5 animate-fadeIn">
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
-              Repository created ({elapsedTime}s)
+              Repository created successfully! ({elapsedTime}s)
             </div>
-            {job.repoUrl ? (
-              <div className="space-y-1">
-                <span className="block text-[10px] uppercase font-bold text-zinc-500 font-mono">Repository URL</span>
+            {job.repoUrl && (
+              <div className="space-y-1 text-xs">
+                <span className="block text-[9px] uppercase font-bold text-zinc-500 font-mono">Repository URL</span>
                 <div className="flex items-center gap-2">
                   <input
                     readOnly
                     value={job.repoUrl}
-                    className="flex-1 h-8 rounded border border-line/50 bg-[#121212] px-2 text-[11px] text-zinc-300 font-mono outline-none"
+                    className="flex-1 premium-input h-9 text-[11px]"
                   />
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(job.repoUrl || "");
-                      toast.success("Repository URL copied to clipboard");
+                      toast.success("Repository URL copied!");
                     }}
-                    className="h-8 rounded border border-line bg-elevated px-3 text-[10px] font-semibold text-zinc-300 hover:bg-elevated/80 transition"
+                    className="premium-btn-secondary px-3.5 text-xs h-9"
                   >
                     Copy
                   </button>
                 </div>
               </div>
-            ) : null}
-            <p className="text-xs text-zinc-300 font-mono">{job.filesExported} files exported</p>
-            
-            {job.cloneCommand ? (
-              <div className="space-y-1">
-                <span className="block text-[10px] uppercase font-bold text-zinc-500 font-mono">Clone Command</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={job.cloneCommand}
-                    className="flex-1 h-8 rounded border border-line/50 bg-[#121212] px-2 text-[11px] text-zinc-300 font-mono outline-none"
-                  />
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(job.cloneCommand || "");
-                      toast.success("Clone command copied to clipboard");
-                    }}
-                    className="h-8 rounded border border-line bg-elevated px-3 text-[10px] font-semibold text-zinc-300 hover:bg-elevated/80 transition"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            )}
           </div>
-        ) : null}
-
-        {job?.status === "failed" || (job?.errors.length ?? 0) > 0 ? (
-          <div className="rounded-lg border border-danger/25 bg-danger/5 p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-xs font-semibold text-danger">
-              <XCircle className="h-4 w-4" />
-              Export issues
-            </div>
-            <div className="mt-3 space-y-2 font-mono text-[11px]">
-              {job?.errors.map((error, index) => (
-                <div key={index} className="border-b border-danger/10 pb-2 last:border-b-0 last:pb-0 font-mono">
-                  <p className="font-semibold text-danger">{error.stage}</p>
-                  {error.path && <p className="text-zinc-500 text-[10px]">File: {error.path}</p>}
-                  <p className="text-zinc-300 mt-0.5">{error.message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        )}
       </aside>
     </div>
   );

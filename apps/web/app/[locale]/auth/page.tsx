@@ -1,6 +1,6 @@
 "use client";
 
-import { Github, Layers3, Loader2 } from "lucide-react";
+import { Github, Layers3, Loader2, Sparkles, Mail, Lock } from "lucide-react";
 import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -42,8 +42,6 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
         return;
       }
 
-      // Hard navigate so the session cookie is sent with the next request.
-      // router.push does not reliably handle full NextAuth callback URLs.
       window.location.href = result?.url ?? callbackUrl;
     } finally {
       setIsSubmitting(false);
@@ -55,106 +53,115 @@ export default function AuthPage({ params }: Readonly<{ params: { locale: string
   };
 
   return (
-    <div className="relative mx-auto grid min-h-[72vh] max-w-5xl items-center gap-10 overflow-hidden rounded-lg border border-line/45 bg-panel p-8 shadow-sm lg:grid-cols-[1fr_420px]">
-      <div className="relative hidden lg:block">
-        <Link className="inline-flex items-center gap-2.5" href="/">
-          <div className="grid h-10 w-10 place-items-center rounded-md border border-line bg-elevated text-zinc-300">
-            <Layers3 className="h-5 w-5" />
+    <div className="relative flex min-h-screen flex-col justify-center bg-background py-12 px-6 lg:px-8 grid-bg-overlay overflow-hidden">
+      {/* Background Ambient Blur */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(circle_at_center,rgba(22,163,74,0.1),transparent_70%)] glow-blob" />
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <Link className="flex flex-col items-center justify-center gap-2.5 group" href="/">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl border border-line bg-card/40 text-zinc-300 transition group-hover:border-accent group-hover:scale-105 duration-200">
+            <Layers3 className="h-6 w-6 text-accent" />
           </div>
-          <div>
-            <p className="font-semibold text-zinc-200">GenStack</p>
-            <p className="text-xs text-zinc-500 font-mono">AI Runtime Studio</p>
+          <div className="text-center">
+            <p className="font-bold tracking-tight text-zinc-100 text-lg">GenStack</p>
+            <p className="text-[10px] text-zinc-500 font-mono tracking-[0.2em] uppercase">AI Runtime Studio</p>
           </div>
         </Link>
-        <h1 className="mt-12 max-w-md text-2xl font-bold text-zinc-100 leading-tight">Sign in when you are ready to save and ship.</h1>
-        <p className="mt-4 max-w-md text-xs leading-relaxed text-zinc-400">
-          The demo remains open for fast review. Authentication is available for GitHub OAuth and local credentials.
-        </p>
-        <div className="mt-8 grid max-w-sm gap-3">
-          {["Prompt to config", "Runtime-ready dashboards", "CRUD data persistence"].map((item) => (
-            <div className="rounded-md border border-line/50 bg-elevated/20 px-4 py-2 text-xs text-zinc-300 font-medium" key={item}>
-              {item}
-            </div>
-          ))}
-        </div>
       </div>
 
-      <div className="relative w-full rounded-lg border border-line/45 bg-panel p-6 shadow-sm">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">GenStack</p>
-        <h2 className="mt-3 text-xl font-bold text-zinc-100">Sign in</h2>
-        <p className="mt-1 text-xs text-zinc-400">Sign in to your GenStack account.</p>
-
-        {error ? (
-          <div className="mt-4 rounded-md border border-danger/25 bg-danger/5 p-3 text-xs text-danger font-mono">
-            {error}
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <div className="premium-card p-8 shadow-2xl">
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-bold tracking-tight text-zinc-100">Welcome Back</h2>
+            <p className="mt-1 text-xs text-zinc-400">Sign in to manage and generate applications.</p>
           </div>
-        ) : null}
 
-        <div className="mt-5 space-y-3">
-          {appConfig.auth.methods.includes("email") ? (
-            <form className="space-y-3" onSubmit={(event) => void handleEmailSignIn(event)}>
-              <input
-                className="h-9 w-full rounded-md border border-line/50 bg-elevated/45 px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                type="email"
-                placeholder="Email"
-                autoComplete="email"
-              />
-              <input
-                className="h-9 w-full rounded-md border border-line/50 bg-elevated/45 px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                type="password"
-                placeholder="Password"
-                autoComplete="current-password"
-              />
-              <button
-                disabled={isSubmitting}
-                className="flex items-center justify-center gap-2 w-full rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition disabled:opacity-50 shadow-none"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Continue with email"
-                )}
-              </button>
-            </form>
-          ) : null}
-
-          {process.env.NODE_ENV !== "production" && (
-            <button
-              type="button"
-              onClick={() => {
-                setEmail("piyush89101@gmail.com");
-                setPassword("123456");
-              }}
-              className="w-full rounded-md border border-dashed border-line/80 hover:border-line/100 bg-elevated/10 hover:bg-elevated/20 px-3 py-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition duration-150"
-            >
-              Fill Development Demo Credentials
-            </button>
+          {error && (
+            <div className="mb-4 rounded-xl border border-danger/25 bg-danger/5 p-3 text-xs text-danger font-mono text-center">
+              {error}
+            </div>
           )}
 
-          {appConfig.auth.methods.includes("github") ? (
-            <button
-              type="button"
-              onClick={handleGitHubSignIn}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-line bg-elevated/25 hover:bg-elevated/45 px-3 py-2 text-xs font-semibold text-zinc-200 transition duration-150"
-            >
-              <Github className="h-3.5 w-3.5" />
-              Continue with GitHub
-            </button>
-          ) : null}
+          <div className="space-y-4">
+            {appConfig.auth.methods.includes("email") ? (
+              <form className="space-y-3.5" onSubmit={(event) => void handleEmailSignIn(event)}>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                    <Mail className="h-4 w-4 text-zinc-500" />
+                  </div>
+                  <input
+                    className="w-full pl-10 premium-input"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    type="email"
+                    placeholder="Email Address"
+                    required
+                    autoComplete="email"
+                  />
+                </div>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                    <Lock className="h-4 w-4 text-zinc-500" />
+                  </div>
+                  <input
+                    className="w-full pl-10 premium-input"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    type="password"
+                    placeholder="Password"
+                    required
+                    autoComplete="current-password"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full premium-btn-primary flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-white" />
+                      Signing in...
+                    </>
+                  ) : (
+                    "Continue with Email"
+                  )}
+                </button>
+              </form>
+            ) : null}
+
+            {process.env.NODE_ENV !== "production" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("piyush89101@gmail.com");
+                  setPassword("123456");
+                }}
+                className="w-full rounded-xl border border-dashed border-line hover:border-line/80 bg-hover/40 px-3 py-2.5 text-[11px] font-mono text-zinc-400 hover:text-zinc-200 transition duration-150"
+              >
+                ⚡ Fill Development Demo Credentials
+              </button>
+            )}
+
+            {appConfig.auth.methods.includes("github") && (
+              <button
+                type="button"
+                onClick={handleGitHubSignIn}
+                className="w-full premium-btn-secondary flex items-center justify-center gap-2"
+              >
+                <Github className="h-4 w-4" />
+                Continue with GitHub
+              </button>
+            )}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-zinc-500">
+            Don&apos;t have an account?{" "}
+            <Link className="text-accent hover:underline font-semibold" href={`/${locale}/auth/register`}>
+              Sign Up
+            </Link>
+          </p>
         </div>
-        <p className="mt-5 text-center text-xs text-zinc-500">
-          Don&apos;t have an account?{" "}
-          <Link className="text-accent hover:underline font-semibold" href={`/${locale}/auth/register`}>
-            Sign Up
-          </Link>
-        </p>
       </div>
     </div>
   );

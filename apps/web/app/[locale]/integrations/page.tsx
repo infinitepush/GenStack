@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Link2, Loader2, Save, Slack, Globe, Table2, Play, CheckCircle2, XCircle } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { getActiveRuntime } from "@/lib/runtime-history";
+import { EmptyState } from "@/components/onboarding/EmptyState";
 
 interface IntegrationSettings {
   webhook?: { enabled: boolean; url: string };
@@ -26,6 +29,9 @@ function apiBase(): string {
 
 export default function IntegrationsPage(): JSX.Element {
   const t = useTranslations();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
+
   const [settings, setSettings] = useState<IntegrationSettings>({
     webhook: { enabled: false, url: "" },
     slack: { enabled: false, url: "" },
@@ -35,6 +41,7 @@ export default function IntegrationsPage(): JSX.Element {
   const [isSaving, setIsSaving] = useState(false);
   const [testingStatus, setTestingStatus] = useState<Record<string, { success?: boolean; message?: string; loading?: boolean }>>({});
   const [sheetsStatus, setSheetsStatus] = useState<{ connected: boolean; message: string; lastSync: string; rowsSynced: number } | null>(null);
+  const [hasRuntime, setHasRuntime] = useState<boolean | null>(null);
 
   const fetchSheetsStatus = async () => {
     try {
@@ -71,8 +78,9 @@ export default function IntegrationsPage(): JSX.Element {
         setIsLoading(false);
       }
     }
+    setHasRuntime(getActiveRuntime(userId) !== null);
     void loadSettings();
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -144,8 +152,27 @@ export default function IntegrationsPage(): JSX.Element {
     }
   };
 
+  if (hasRuntime === null) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+      </div>
+    );
+  }
+
+  if (!hasRuntime) {
+    return (
+      <EmptyState
+        locale="en"
+        icon={<Link2 className="h-7 w-7 text-zinc-500" />}
+        title="No dynamic integrations configured"
+        description="GenStack lets you wire outbound integrations like Webhooks, Slack notifications, and Google Sheets updates automatically on database CRUD events. Generate your app first."
+      />
+    );
+  }
+
   return (
-    <div className="space-y-8 max-w-[1600px] mx-auto pb-12">
+    <div className="space-y-8 max-w-[1600px] mx-auto pb-12 animate-fadeIn">
       <div>
         <span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider text-accent uppercase">
           Phase 6 Integrations
@@ -168,11 +195,11 @@ export default function IntegrationsPage(): JSX.Element {
         <div className="grid gap-8 xl:grid-cols-[1fr_320px]">
           <div className="space-y-6">
             {/* Custom Webhook Settings */}
-            <section className="rounded-lg border border-line bg-panel p-6 space-y-4 shadow-sm">
+            <section className="premium-card p-6 space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-lg border border-line bg-elevated text-zinc-400">
-                    <Globe className="h-5 w-5" />
+                  <div className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-card/60 text-zinc-400">
+                    <Globe className="h-5 w-5 text-accent" />
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-zinc-200">Custom Webhooks</h2>
@@ -191,12 +218,12 @@ export default function IntegrationsPage(): JSX.Element {
                     }
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent peer-checked:after:bg-white"></div>
+                  <div className="w-11 h-6 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent peer-checked:after:bg-white"></div>
                 </label>
               </div>
 
               {settings.webhook?.enabled && (
-                <div className="space-y-4 pt-2 border-t border-line/30 animate-fadeIn">
+                <div className="space-y-4 pt-2 border-t border-line animate-fadeIn">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold text-zinc-500">Webhook Target URL</label>
                     <input
@@ -209,7 +236,7 @@ export default function IntegrationsPage(): JSX.Element {
                           webhook: { ...(prev.webhook ?? { enabled: true }), url: e.target.value }
                         }))
                       }
-                      className="w-full h-9 rounded-md border border-line/50 bg-[#121212] px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
+                      className="w-full premium-input"
                     />
                   </div>
 
@@ -218,16 +245,16 @@ export default function IntegrationsPage(): JSX.Element {
                       type="button"
                       disabled={testingStatus.webhook?.loading || !settings.webhook.url}
                       onClick={() => triggerTest("webhook")}
-                      className="inline-flex items-center gap-1.5 rounded border border-line bg-elevated/25 px-2.5 py-1 text-xs font-semibold text-zinc-300 hover:bg-elevated/50 hover:text-white transition disabled:opacity-50"
+                      className="premium-btn-secondary px-3 text-xs h-8 flex items-center gap-1"
                     >
                       {testingStatus.webhook?.loading ? (
                         <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin text-accent" />
                           Testing Webhook...
                         </>
                       ) : (
                         <>
-                          <Play className="h-3 w-3" />
+                          <Play className="h-3 w-3 fill-current" />
                           Test Webhook
                         </>
                       )}
@@ -244,11 +271,11 @@ export default function IntegrationsPage(): JSX.Element {
             </section>
 
             {/* Slack Webhook Settings */}
-            <section className="rounded-lg border border-line bg-panel p-6 space-y-4 shadow-sm">
+            <section className="premium-card p-6 space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-lg border border-line bg-elevated text-zinc-400">
-                    <Slack className="h-5 w-5" />
+                  <div className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-card/60 text-zinc-400">
+                    <Slack className="h-5 w-5 text-accent" />
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-zinc-200">Slack Notifications</h2>
@@ -267,12 +294,12 @@ export default function IntegrationsPage(): JSX.Element {
                     }
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent peer-checked:after:bg-white"></div>
+                  <div className="w-11 h-6 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent peer-checked:after:bg-white"></div>
                 </label>
               </div>
 
               {settings.slack?.enabled && (
-                <div className="space-y-4 pt-2 border-t border-line/30 animate-fadeIn">
+                <div className="space-y-4 pt-2 border-t border-line animate-fadeIn">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold text-zinc-500">Incoming Webhook URL</label>
                     <input
@@ -285,7 +312,7 @@ export default function IntegrationsPage(): JSX.Element {
                           slack: { ...(prev.slack ?? { enabled: true }), url: e.target.value }
                         }))
                       }
-                      className="w-full h-9 rounded-md border border-line/50 bg-[#121212] px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
+                      className="w-full premium-input"
                     />
                   </div>
 
@@ -294,16 +321,16 @@ export default function IntegrationsPage(): JSX.Element {
                       type="button"
                       disabled={testingStatus.slack?.loading || !settings.slack.url}
                       onClick={() => triggerTest("slack")}
-                      className="inline-flex items-center gap-1.5 rounded border border-line bg-elevated/25 px-2.5 py-1 text-xs font-semibold text-zinc-300 hover:bg-elevated/50 hover:text-white transition disabled:opacity-50"
+                      className="premium-btn-secondary px-3 text-xs h-8 flex items-center gap-1"
                     >
                       {testingStatus.slack?.loading ? (
                         <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin text-accent" />
                           Testing Slack...
                         </>
                       ) : (
                         <>
-                          <Play className="h-3 w-3" />
+                          <Play className="h-3 w-3 fill-current" />
                           Test Slack
                         </>
                       )}
@@ -320,11 +347,11 @@ export default function IntegrationsPage(): JSX.Element {
             </section>
 
             {/* Google Sheets Settings */}
-            <section className="rounded-lg border border-line bg-panel p-6 space-y-4 shadow-sm">
+            <section className="premium-card p-6 space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-lg border border-line bg-elevated text-zinc-400">
-                    <Table2 className="h-5 w-5" />
+                  <div className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-card/60 text-zinc-400">
+                    <Table2 className="h-5 w-5 text-accent" />
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-zinc-200">Google Sheets Feed</h2>
@@ -343,12 +370,12 @@ export default function IntegrationsPage(): JSX.Element {
                     }
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent peer-checked:after:bg-white"></div>
+                  <div className="w-11 h-6 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent peer-checked:after:bg-white"></div>
                 </label>
               </div>
 
               {settings.sheets?.enabled && (
-                <div className="space-y-4 pt-2 border-t border-line/30 animate-fadeIn">
+                <div className="space-y-4 pt-2 border-t border-line animate-fadeIn">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="block text-xs font-semibold text-zinc-500">Spreadsheet ID</label>
@@ -362,7 +389,7 @@ export default function IntegrationsPage(): JSX.Element {
                             sheets: { ...(prev.sheets ?? { enabled: true, sheetName: "" }), spreadsheetId: e.target.value }
                           }))
                         }
-                        className="w-full h-9 rounded-md border border-line/50 bg-[#121212] px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
+                        className="w-full premium-input"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -377,17 +404,17 @@ export default function IntegrationsPage(): JSX.Element {
                             sheets: { ...(prev.sheets ?? { enabled: true, spreadsheetId: "" }), sheetName: e.target.value }
                           }))
                         }
-                        className="w-full h-9 rounded-md border border-line/50 bg-[#121212] px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
+                        className="w-full premium-input"
                       />
                     </div>
                   </div>
 
                   {sheetsStatus && (
-                    <div className="text-xs font-mono border border-line/60 bg-elevated/10 p-3 rounded-md space-y-1.5">
+                    <div className="text-xs font-mono border border-line bg-card/20 p-3 rounded-xl space-y-1.5 animate-fadeIn">
                       <div className="flex justify-between">
                         <span className="text-zinc-500">Google Sheets Sync:</span>
                         <span className={sheetsStatus.connected ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
-                          {sheetsStatus.connected ? "🟢 Connected" : `🔴 ${sheetsStatus.message}`}
+                          {sheetsStatus.connected ? "Connected" : `Disconnected (${sheetsStatus.message})`}
                         </span>
                       </div>
                       {sheetsStatus.connected && (
@@ -410,16 +437,16 @@ export default function IntegrationsPage(): JSX.Element {
                       type="button"
                       disabled={testingStatus.sheets?.loading || !settings.sheets.spreadsheetId}
                       onClick={() => triggerTest("sheets")}
-                      className="inline-flex items-center gap-1.5 rounded border border-line bg-elevated/25 px-2.5 py-1 text-xs font-semibold text-zinc-300 hover:bg-elevated/50 hover:text-white transition disabled:opacity-50"
+                      className="premium-btn-secondary px-3 text-xs h-8 flex items-center gap-1"
                     >
                       {testingStatus.sheets?.loading ? (
                         <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin text-accent" />
                           Testing Sheets...
                         </>
                       ) : (
                         <>
-                          <Play className="h-3 w-3" />
+                          <Play className="h-3 w-3 fill-current" />
                           Test Google Sheets
                         </>
                       )}
@@ -438,27 +465,24 @@ export default function IntegrationsPage(): JSX.Element {
             <button
               onClick={() => void saveSettings()}
               disabled={isSaving}
-              className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-50 transition flex items-center gap-2 shadow-none"
+              className="premium-btn-primary px-5 text-xs h-10 flex items-center gap-2 shadow-none"
               type="button"
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
                   Saving Settings...
                 </>
               ) : (
-                <>
-                  <Save className="h-3.5 w-3.5" />
-                  Save Integrations
-                </>
+                "Save Integrations"
               )}
             </button>
           </div>
 
           <aside className="space-y-8">
-            <div className="rounded-lg border border-line bg-panel p-5 space-y-3 shadow-sm">
-              <h2 className="text-xs font-semibold text-zinc-200">How it works</h2>
-              <p className="text-xs text-zinc-400 leading-relaxed">
+            <div className="premium-card p-5 space-y-3 shadow-sm text-xs">
+              <h2 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider font-mono">How it works</h2>
+              <p className="text-zinc-400 leading-relaxed">
                 When integrations are active, database modifications (insert, update, delete) made by users will generate asynchronous HTTP requests to your defined endpoints.
               </p>
               <p className="text-[10px] text-zinc-500 leading-relaxed font-mono">

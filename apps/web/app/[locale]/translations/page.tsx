@@ -4,6 +4,9 @@ import { useEffect, useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Languages, Search, Save, Download, Loader2, Globe, FileCode, Check } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { getActiveRuntime } from "@/lib/runtime-history";
+import { EmptyState } from "@/components/onboarding/EmptyState";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -20,6 +23,9 @@ function apiBase(): string {
 
 export default function TranslationsPage(): JSX.Element {
   const t = useTranslations();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "_anonymous";
+
   const [messages, setMessages] = useState<Record<string, Record<string, string>>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,8 +33,8 @@ export default function TranslationsPage(): JSX.Element {
   const [selectedLocale, setSelectedLocale] = useState<string>("en");
   const [exportFormat, setExportFormat] = useState<"json" | "yaml" | "csv">("json");
   const [previewLocale, setPreviewLocale] = useState<string>("en");
+  const [hasRuntime, setHasRuntime] = useState<boolean | null>(null);
 
-  // Keep previewLocale in sync with selectedLocale if selectedLocale changes
   useEffect(() => {
     setPreviewLocale(selectedLocale);
   }, [selectedLocale]);
@@ -81,8 +87,9 @@ export default function TranslationsPage(): JSX.Element {
         setIsLoading(false);
       }
     }
+    setHasRuntime(getActiveRuntime(userId) !== null);
     void fetchTranslations();
-  }, [selectedLocale]);
+  }, [selectedLocale, userId]);
 
   const locales = useMemo(() => Object.keys(messages), [messages]);
 
@@ -110,7 +117,6 @@ export default function TranslationsPage(): JSX.Element {
   const saveTranslations = async () => {
     setIsSaving(true);
     try {
-      // 1. Fetch current configuration
       const configRes = await fetch(`${apiBase()}/config`, { cache: "no-store", credentials: "include" });
       const configBody = await configRes.json();
       if (!configBody.success || !configBody.data?.config) {
@@ -120,7 +126,6 @@ export default function TranslationsPage(): JSX.Element {
       const config = configBody.data.config;
       config.translations = messages;
 
-      // 2. Save updated configuration
       const saveRes = await fetch(`${apiBase()}/config?origin=translations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -134,7 +139,6 @@ export default function TranslationsPage(): JSX.Element {
 
       window.dispatchEvent(new CustomEvent("genstack:config-applied"));
 
-      // 3. Log activity
       await fetch(`${apiBase()}/runtime/activity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,7 +195,6 @@ export default function TranslationsPage(): JSX.Element {
     URL.revokeObjectURL(url);
     toast.success(`Downloaded ${filename}`);
 
-    // Log timeline activity
     fetch(`${apiBase()}/runtime/activity`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -214,8 +217,27 @@ export default function TranslationsPage(): JSX.Element {
     ar: "🇸🇦 Arabic"
   };
 
+  if (hasRuntime === null) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+      </div>
+    );
+  }
+
+  if (!hasRuntime) {
+    return (
+      <EmptyState
+        locale={selectedLocale}
+        icon={<Languages className="h-7 w-7 text-zinc-500" />}
+        title="No localization configs"
+        description="GenStack provides automatic multi-language support. Generate your application first to configure translated static headers and dynamic values."
+      />
+    );
+  }
+
   return (
-    <div className="space-y-8 max-w-[1600px] mx-auto pb-12">
+    <div className="space-y-8 max-w-[1600px] mx-auto pb-12 animate-fadeIn">
       <div>
         <span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider text-accent uppercase">
           Dynamic Translations
@@ -235,18 +257,18 @@ export default function TranslationsPage(): JSX.Element {
           <p className="text-xs text-zinc-400 font-mono">Generating dynamic translations...</p>
         </div>
       ) : (
-        <div className="grid gap-8 xl:grid-cols-[1fr_320px]">
-          <div className="rounded-lg border border-line bg-panel p-6 md:p-8 space-y-6 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-line/45">
+        <div className="grid gap-8 xl:grid-cols-[1fr_360px]">
+          <div className="premium-card p-6 md:p-8 space-y-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-line">
               <div className="flex flex-wrap gap-1.5">
                 {locales.map((locale) => (
                   <button
                     key={locale}
                     onClick={() => setSelectedLocale(locale)}
-                    className={`px-3 py-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider transition ${
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-semibold uppercase tracking-wider transition ${
                       selectedLocale === locale
                         ? "bg-accent text-white"
-                        : "text-zinc-400 hover:text-zinc-200 bg-elevated/20 border border-line/40 hover:bg-elevated/45"
+                        : "text-zinc-400 hover:text-zinc-200 bg-card/40 border border-line hover:bg-hover"
                     }`}
                     type="button"
                   >
@@ -256,19 +278,19 @@ export default function TranslationsPage(): JSX.Element {
               </div>
 
               <div className="relative max-w-xs w-full">
-                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                <Search className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
                 <input
                   type="text"
                   placeholder="Search keys or values..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-9 rounded-md border border-line/50 bg-[#121212] pl-9 pr-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
+                  className="w-full pl-10 premium-input"
                 />
               </div>
             </div>
 
-            <div className="border border-line/45 rounded-lg overflow-hidden bg-elevated/5">
-              <div className="max-h-[500px] overflow-y-auto divide-y divide-line/40">
+            <div className="border border-line rounded-xl overflow-hidden bg-card/10">
+              <div className="max-h-[500px] overflow-y-auto divide-y divide-line">
                 {filteredKeys.length === 0 ? (
                   <div className="p-8 text-center text-xs text-zinc-500">No translation keys match your search.</div>
                 ) : (
@@ -294,7 +316,7 @@ export default function TranslationsPage(): JSX.Element {
                           type="text"
                           value={value}
                           onChange={(e) => handleTranslationChange(key, e.target.value)}
-                          className="w-full h-9 rounded-md border border-line/50 bg-[#121212] px-3 text-xs outline-none focus:border-accent focus:ring-0 transition text-zinc-200"
+                          className="w-full premium-input"
                         />
                       </div>
                     );
@@ -307,18 +329,16 @@ export default function TranslationsPage(): JSX.Element {
               <button
                 onClick={() => void saveTranslations()}
                 disabled={isSaving}
-                className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-50 transition shadow-none"
+                className="premium-btn-primary px-5 text-xs h-10 shadow-none"
                 type="button"
               >
                 {isSaving ? (
                   <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin inline-block mr-1.5" />
+                    <Loader2 className="h-4 w-4 animate-spin inline-block mr-1.5 text-white" />
                     Saving Changes...
                   </>
                 ) : (
-                  <>
-                    Save Translations
-                  </>
+                  "Save Translations"
                 )}
               </button>
             </div>
@@ -326,26 +346,25 @@ export default function TranslationsPage(): JSX.Element {
 
           <aside className="space-y-6">
             {/* Format Selection & Downloads */}
-            <div className="rounded-lg border border-line bg-panel p-5 space-y-4 shadow-sm">
-              <div className="flex items-center gap-2 pb-2 border-b border-line/40">
+            <div className="premium-card p-5 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-2 border-b border-line">
                 <Globe className="h-4 w-4 text-accent" />
                 <h2 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider font-mono">
                   Export Options
                 </h2>
               </div>
               <p className="text-xs text-zinc-400 leading-relaxed font-sans">
-                Choose a format and download translation files for integration or distribution.
+                Choose a format and download translation files.
               </p>
 
-              {/* Format Selectors */}
               <div className="space-y-2">
                 <label className="block text-[10px] uppercase font-bold text-zinc-500 font-mono">Format</label>
-                <div className="grid grid-cols-3 gap-1 bg-elevated/20 p-1 rounded-md border border-line/50">
+                <div className="grid grid-cols-3 gap-1 bg-card/30 p-1 rounded-xl border border-line">
                   {(["json", "yaml", "csv"] as const).map((fmt) => (
                     <button
                       key={fmt}
                       onClick={() => setExportFormat(fmt)}
-                      className={`py-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider transition ${
+                      className={`py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition ${
                         exportFormat === fmt
                           ? "bg-accent text-white"
                           : "text-zinc-400 hover:text-zinc-200"
@@ -358,20 +377,20 @@ export default function TranslationsPage(): JSX.Element {
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-line/30">
-                <label className="block text-[10px] uppercase font-bold text-zinc-500 font-mono">Download Translation Bundle</label>
+              <div className="space-y-2 pt-2 border-t border-line">
+                <label className="block text-[10px] uppercase font-bold text-zinc-500 font-mono">Download Bundle</label>
                 {locales.map((locale) => (
                   <button
                     key={locale}
                     onClick={() => downloadTranslation(locale)}
-                    className="w-full rounded-md bg-elevated/20 border border-line hover:bg-elevated/45 px-3 py-2 text-xs font-semibold text-zinc-300 flex items-center justify-between gap-2 transition duration-150"
+                    className="w-full premium-btn-secondary px-3.5 h-9 text-xs flex items-center justify-between gap-2"
                     type="button"
                   >
-                    <span className="flex items-center gap-2 uppercase font-mono text-[10px]">
-                      <FileCode className="h-3.5 w-3.5 text-zinc-400" />
+                    <span className="flex items-center gap-2 uppercase font-mono text-[9px]">
+                      <FileCode className="h-3.5 w-3.5 text-zinc-500" />
                       {locale}.{exportFormat}
                     </span>
-                    <span className="flex items-center gap-1 text-[10px] text-accent font-mono hover:text-accent-hover">
+                    <span className="text-[10px] text-accent font-semibold font-mono">
                       Download
                     </span>
                   </button>
@@ -380,8 +399,8 @@ export default function TranslationsPage(): JSX.Element {
             </div>
 
             {/* Translation Preview Panel */}
-            <div className="rounded-lg border border-line bg-panel p-5 space-y-4 shadow-sm">
-              <div className="flex items-center gap-2 pb-2 border-b border-line/40">
+            <div className="premium-card p-5 space-y-4 shadow-sm">
+              <div className="flex items-center gap-2 pb-2 border-b border-line">
                 <FileCode className="h-4 w-4 text-accent" />
                 <h2 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider font-mono">
                   Translation Preview
@@ -393,28 +412,21 @@ export default function TranslationsPage(): JSX.Element {
                   <select
                     value={previewLocale}
                     onChange={(e) => setPreviewLocale(e.target.value)}
-                    className="rounded-md border border-line/50 bg-[#121212] px-2 py-1 text-xs text-zinc-200 outline-none focus:border-accent focus:ring-0 transition"
+                    className="rounded-xl border border-line bg-[#121214] px-2 py-1 text-xs text-zinc-200 outline-none focus:border-accent"
                   >
                     {locales.map((loc) => (
-                      <option key={loc} value={loc} className="bg-[#181818]">
+                      <option key={loc} value={loc} className="bg-[#18181D]">
                         {localeDisplayNames[loc] ? localeDisplayNames[loc].split(" ")[1] : loc.toUpperCase()}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div className="relative">
-                  <pre className="max-h-60 overflow-auto rounded-md bg-elevated/5 p-3 font-mono text-[10px] text-zinc-400 border border-line/40 whitespace-pre-wrap">
+                  <pre className="max-h-60 overflow-auto rounded-xl bg-card/10 p-3 font-mono text-[10px] text-zinc-400 border border-line whitespace-pre-wrap">
                     {serializedPreview}
                   </pre>
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-lg border border-line bg-panel p-5 shadow-sm">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono">Metadata Summary</h3>
-              <p className="mt-2 text-xs text-zinc-500 leading-relaxed font-sans">
-                Dynamic fields are pre-seeded in all 8 supported languages. Values will carry language prefixes (like [HI], [FR], etc.) if not explicitly translated, avoiding placeholder errors.
-              </p>
             </div>
           </aside>
         </div>

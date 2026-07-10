@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw, Sparkles, AlertCircle, Layout } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { AppConfig, ComponentConfig, ConfigEngineResult, DatabaseTableConfig, PageConfig } from "@genstack/config-types";
 import { getComponentRenderer, type DataRecord } from "@/components/registry";
 import { getActiveRuntime } from "@/lib/runtime-history";
+import { EmptyState } from "@/components/onboarding/EmptyState";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -218,7 +219,6 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
       }
       const total = body.data?.totalInserted ?? 0;
       toast.success(`Added ${total} sample records.`);
-      // Refresh all active data sources
       dataSources.forEach((source) => void loadTable(source));
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Failed to generate sample data.");
@@ -227,13 +227,13 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
     }
   }, [dataSources, loadTable]);
 
-   if (isLoadingConfig) {
+  if (isLoadingConfig) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="h-8 w-64 animate-pulse rounded bg-white/5" />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="h-48 animate-pulse rounded-lg border border-line bg-panel" />
-          <div className="h-48 animate-pulse rounded-lg border border-line bg-panel" />
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="h-48 animate-pulse rounded-[20px] border border-line bg-panel" />
+          <div className="h-48 animate-pulse rounded-[20px] border border-line bg-panel" />
         </div>
       </div>
     );
@@ -241,50 +241,52 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
 
   if (!config && !hasActiveRuntime) {
     return (
-      <section className="rounded-lg border border-line/45 bg-panel p-8 text-center shadow-sm">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500 font-semibold">No Active Runtime</p>
-        <h1 className="mt-3 text-xl font-bold text-white">Generate your first app</h1>
-        <p className="mx-auto mt-2 max-w-xl text-xs leading-relaxed text-zinc-400">
-          This workspace starts empty so GenStack feels like an AI platform, not a preloaded demo app. Create a runtime in AI Studio, then its pages will appear here.
-        </p>
-        <Link className="mt-5 inline-flex rounded-md bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition duration-150 shadow-none" href={`/${locale}/ai`}>
-          Open AI Studio
-        </Link>
-      </section>
+      <EmptyState
+        locale={locale}
+        icon={<Layout className="h-7 w-7 text-zinc-500" />}
+        title="No active application runtime"
+        description="This workspace starts empty so GenStack feels like an AI platform, not a preloaded demo app. Create a runtime in AI Studio, then its pages will appear here."
+      />
     );
   }
 
   if (!config) {
     return (
-      <section className="rounded-lg border border-danger/25 bg-danger/5 p-8">
-        <h1 className="text-xl font-bold text-danger">Runtime config unavailable</h1>
-        <p className="mt-2 text-xs text-danger/80 leading-relaxed font-mono">{runtimeError ?? "Start the API server and refresh this page."}</p>
+      <section className="rounded-[20px] border border-danger/25 bg-danger/5 p-8 text-center max-w-lg mx-auto">
+        <AlertCircle className="h-8 w-8 text-danger mx-auto mb-4" />
+        <h1 className="text-lg font-bold text-danger">Runtime config unavailable</h1>
+        <p className="mt-2 text-xs text-danger/80 leading-relaxed font-mono">
+          {runtimeError ?? "Start the API server and refresh this page."}
+        </p>
       </section>
     );
   }
 
   if (!page) {
     return (
-      <section className="rounded-lg border border-line/45 bg-panel/85 p-8 text-center">
-        <h1 className="text-xl font-bold text-white">No pages configured</h1>
-        <p className="mt-2 text-xs text-zinc-400 leading-relaxed">No config.ui.pages entry matches route "{route}".</p>
+      <section className="rounded-[20px] border border-line bg-panel p-8 text-center max-w-lg mx-auto">
+        <h1 className="text-lg font-bold text-white">No pages configured</h1>
+        <p className="mt-2 text-xs text-zinc-400 leading-relaxed">No config.ui.pages entry matches route &ldquo;{route}&rdquo;.</p>
       </section>
     );
   }
 
-  // Determine if any data source table is empty
   const hasEmptyTable = dataSources.some((s) => (dataByTable[s] ?? []).length === 0);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-8 animate-fadeIn">
+      {/* Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">Config-rendered page</p>
-          <h1 className="mt-1.5 text-2xl font-bold text-zinc-100">{page.name}</h1>
+          <span className="rounded bg-accent/10 px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider text-accent uppercase">
+            Active Workspace
+          </span>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-zinc-100">{page.name}</h1>
+          <p className="mt-1 text-xs text-zinc-400">This is your dynamic generated dashboard.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-elevated/20 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-elevated/50 hover:text-zinc-100 transition duration-150"
+            className="premium-btn-secondary px-4 flex items-center justify-center gap-2 h-9 text-xs"
             onClick={() => dataSources.forEach((source) => void loadTable(source))}
             type="button"
           >
@@ -293,10 +295,10 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
           </button>
           <button
             disabled={isGeneratingSampleData}
-            className={`inline-flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-xs font-semibold transition duration-150 disabled:opacity-60 disabled:cursor-not-allowed ${
+            className={`premium-btn-primary px-4 flex items-center justify-center gap-2 h-9 text-xs shadow-none border ${
               hasEmptyTable
-                ? "border-accent/50 bg-accent/10 text-accent hover:bg-accent/20"
-                : "border-line bg-elevated/20 text-zinc-400 hover:bg-elevated/50 hover:text-zinc-300"
+                ? "border-accent/40 bg-accent/10 text-accent hover:bg-accent/25"
+                : "border-line bg-card/40 text-zinc-300 hover:bg-hover"
             }`}
             onClick={() => void handleGenerateSampleData()}
             type="button"
@@ -316,12 +318,14 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
         </div>
       </div>
 
-      {runtimeError ? (
-        <div className="rounded-lg border border-danger/25 bg-danger/5 p-4 text-xs text-danger">{runtimeError}</div>
-      ) : null}
+      {runtimeError && (
+        <div className="rounded-xl border border-danger/25 bg-danger/5 p-4 text-xs text-danger">{runtimeError}</div>
+      )}
 
       {page.components.length === 0 ? (
-        <div className="rounded-lg border border-line/45 bg-panel p-8 text-center text-zinc-500 text-xs">{t("empty_state")}</div>
+        <div className="rounded-[20px] border border-line bg-panel p-12 text-center text-zinc-500 text-xs">
+          {t("empty_state")}
+        </div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-2">
           {page.components.map((component, index) => {
@@ -342,9 +346,11 @@ export function DynamicPage({ route, locale }: DynamicPageProps): JSX.Element {
             return (
               <div key={`${component.type}-${source ?? "static"}-${index}`} className={component.type === "table" || component.type === "chart" ? "xl:col-span-2" : ""}>
                 {isLoading ? (
-                  <div className="h-40 animate-pulse rounded-lg border border-line bg-panel" />
+                  <div className="h-56 animate-pulse rounded-[20px] border border-line bg-panel" />
                 ) : (
-                  <Renderer {...rendererProps} />
+                  <div className="premium-card p-6 shadow-sm">
+                    <Renderer {...rendererProps} />
+                  </div>
                 )}
               </div>
             );
