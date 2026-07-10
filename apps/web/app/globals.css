@@ -83,6 +83,10 @@ a {
   transition: all 180ms ease;
 }
 
+.premium-input.pl-10 {
+  padding-left: 40px !important;
+}
+
 .premium-input:focus {
   border-color: #16A34A;
   background: rgba(255, 255, 255, 0.04);
